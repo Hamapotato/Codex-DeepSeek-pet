@@ -1,0 +1,11 @@
+{
+  "protocol": "openai-compatible",
+  "baseUrl": "https://api.deepseek.com",
+  "model": "deepseek-flash",
+  "enabled": true,
+  "automaticWhispers": true,
+  "whisperIntervalSec": 900,
+  "maxTokens": 1024,
+  "timeoutMs": 30000,
+  "apiKey": "sk-REPLACE_ME"
+}

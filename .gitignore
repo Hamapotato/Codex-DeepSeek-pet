@@ -1,0 +1,10 @@
+# 本地运行状态 / 密钥：永远不要提交
+node_modules/
+.env
+.env.*
+config/standalone-ai.json
+config/balance-key.txt
+*.log
+*.dsh-pet-backup-*
+Thumbs.db
+.DS_Store

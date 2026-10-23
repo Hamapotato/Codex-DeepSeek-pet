@@ -1,0 +1,38 @@
+// dsh-pet 用户配置模板（JSONC，允许注释）。
+// 部署时复制到：<DSH_HOME>\dsh-pet\main-config.jsonc
+// 例如：D:\DeepSeekHarness\dsh-pet\main-config.jsonc
+{
+  "pets": [
+    {
+      "id": "main",
+      // 显示名：悬浮提示、AI 人设、托盘菜单都用它
+      "name": "大肥鱼",
+      // 宠物宽度 px（高度自动 = 宽度 × 9/16）
+      "size": 462,
+      "balanceEnabled": true,
+      "whisperEnabled": true,
+      "workStatusEnabled": true,
+      // true = 不自己转向/走位；false = 保留随机溜达
+      "fixedEnabled": false,
+      // 独立模式必须是 desktop 或 both，none 时不会创建桌面小窗
+      "display": "desktop",
+      "position": {
+        // 四角之一：top-left / top-right / bottom-left / bottom-right
+        "corner": "bottom-right",
+        // 距所属角落的偏移 px
+        "marginX": 24,
+        "marginY": 24
+      }
+    }
+  ],
+  // 余额自动刷新间隔（秒）
+  "eventsRefreshSec": {
+    "balance": 30
+  },
+  // 每次动画结束后的随机权重（百分比）：idle / turn / move，余下概率落在原地小动作
+  "animationWeights": {
+    "idle": 10,
+    "turn": 5,
+    "move": 1
+  }
+}
