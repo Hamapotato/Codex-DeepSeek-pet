@@ -44,6 +44,8 @@ const STATE_FILE = path.join(DIARY_DIR, '.state.json');
 const LOCK_FILE = path.join(DIARY_DIR, '.rebuild.lock');
 // 峰时先记账、谷时再写：待写素材按日期排队
 const PENDING_FILE = path.join(DIARY_DIR, '.pending.json');
+// 写入互斥：看门狗和手动命令可能同时想写，串行化避免同一条被写两次
+const WRITE_LOCK = path.join(DIARY_DIR, '.write.lock');
 
 const MAX_ITEMS = 40;
 const MAX_ITEM_CHARS = 140;
@@ -143,6 +145,33 @@ function dedupeItems(items) {
 function pendingDates() {
   const q = readQueue();
   return Object.keys(q).filter((k) => Array.isArray(q[k]) && q[k].length > 0);
+}
+
+/**
+ * 写入互斥锁（跨进程）。拿不到就跳过这一轮——宁可晚一点，也不要同一条被写两次。
+ * 超过 5 分钟的锁视为崩溃残留，可以直接清掉。
+ */
+function acquireWriteLock() {
+  try {
+    fs.mkdirSync(DIARY_DIR, { recursive: true });
+    fs.writeFileSync(WRITE_LOCK, String(process.pid), { flag: 'wx' });
+    return true;
+  } catch {
+    try {
+      if (Date.now() - fs.statSync(WRITE_LOCK).mtimeMs > 5 * 60 * 1000) {
+        fs.unlinkSync(WRITE_LOCK);
+        fs.writeFileSync(WRITE_LOCK, String(process.pid), { flag: 'wx' });
+        return true;
+      }
+    } catch {}
+    return false;
+  }
+}
+
+function releaseWriteLock() {
+  try {
+    fs.unlinkSync(WRITE_LOCK);
+  } catch {}
 }
 
 /** 密钥、长 token 之类不写进提示词，避免日记把敏感串带上。 */
@@ -450,6 +479,12 @@ function migrateLegacyDay(key) {
   const at = st.generatedAt ? new Date(st.generatedAt) : null;
   const when = at ? `${pad2(at.getHours())}:${pad2(at.getMinutes())}` : '00:00';
   const count = st.entries || 0;
+  // 迁移会重写文件，先留一份原样备份
+  try {
+    const stamp = new Date();
+    const suffix = `${stamp.getFullYear()}${pad2(stamp.getMonth() + 1)}${pad2(stamp.getDate())}-${pad2(stamp.getHours())}${pad2(stamp.getMinutes())}${pad2(stamp.getSeconds())}`;
+    fs.copyFileSync(file, `${file}.bak-legacy-${suffix}`);
+  } catch {}
   fs.writeFileSync(
     file,
     [`# ${key}`, '', `## ${when} · ${count} 件事`, '', body, '', `<!-- ${count} 条 -->`, ''].join('\n'),
@@ -484,6 +519,11 @@ function appendEntry(key, entry) {
   const existing = fs.readFileSync(file, 'utf8');
   const prefix = existing.trim() && !existing.endsWith('\n\n') ? '\n' : '';
   fs.appendFileSync(file, prefix + block, 'utf8');
+  // 只追加：写完后旧内容必须原样还在，否则立刻报错（防止未来改崩成"整篇重写"）
+  const after = fs.readFileSync(file, 'utf8');
+  if (!after.startsWith(existing)) {
+    throw new Error(`append check failed: existing content changed in ${file}`);
+  }
 }
 
 /** 所有日记条目，最新的在前。 */
@@ -690,6 +730,11 @@ async function runDiary(options = {}) {
     return { status: 'dry-run' };
   }
 
+  if (!acquireWriteLock()) {
+    say('[diary] 另一个写入正在进行，跳过这一轮');
+    return { status: 'skipped', reason: 'locked' };
+  }
+  try {
   const cfg = readAiConfig();
   const now = new Date();
   const history = Array.isArray(day.entries) ? day.entries.slice(-199) : [];
@@ -742,6 +787,9 @@ async function runDiary(options = {}) {
 
   await notifyPet(`日记写好了～（${lastTime}）`);
   return { status: 'written', path: diaryPath(key), text: lastText, time: lastTime, count };
+  } finally {
+    releaseWriteLock();
+  }
 }
 
 function listDiaries() {
