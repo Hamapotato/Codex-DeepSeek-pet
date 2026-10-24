@@ -51,7 +51,7 @@ const MAX_ITEMS = 40;
 const MAX_ITEM_CHARS = 140;
 // 一篇日记覆盖多少条提问：关闭 Codex 时门槛低一些，运行中攒够一大段才写。
 const MIN_TURNS_CLOSE = Number(process.env.DSH_DIARY_MIN_TURNS_CLOSE || 3);
-const MIN_TURNS_MIDRUN = Number(process.env.DSH_DIARY_MIN_TURNS_MIDRUN || 12);
+const MIN_TURNS_MIDRUN = Number(process.env.DSH_DIARY_MIN_TURNS_MIDRUN || 20);
 // deepseek-flash 会先写 reasoning_content 再写正文，预算太小会让正文被截断甚至为空。
 // 正文 100 字左右 ≈ 150 token，思考过程通常 300～600 token，留 900 足够且仍然很便宜。
 const DEFAULT_MAX_TOKENS = Number(process.env.DSH_DIARY_MAX_TOKENS || 900);
@@ -210,18 +210,22 @@ function dayStartMs(key) {
   return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
 }
 
-/**
- * 「心声线」那条对话默认**也算素材**（倾诉、日常、烦恼都会进日记和印象）。
- * 如果哪天不想让它进，设 DSH_DIARY_EXCLUDE_CHAT=1。
- */
-function linkedChatSessionId() {
-  if (process.env.DSH_DIARY_EXCLUDE_CHAT !== '1') return null;
+/** 心声线绑定的 session id（没绑定返回 null）。 */
+function linkedSessionId() {
   try {
     const link = JSON.parse(fs.readFileSync(path.join(DSH_HOME, 'dsh-pet', 'chat-link.json'), 'utf8'));
     return link && typeof link.sessionId === 'string' ? link.sessionId : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * 「心声线」那条对话默认**也算素材**（倾诉、日常、烦恼都会进日记和印象）。
+ * 如果哪天不想让它进，设 DSH_DIARY_EXCLUDE_CHAT=1。
+ */
+function linkedChatSessionId() {
+  return process.env.DSH_DIARY_EXCLUDE_CHAT === '1' ? linkedSessionId() : null;
 }
 
 /** 递归列出目录下所有 rollout 文件。 */
@@ -296,6 +300,9 @@ function readUserMessages(file) {
   }
 
   const items = [];
+  // 文件名里带着 session id（rollout-...-<uuid>.jsonl），用来识别"这条消息来自哪条对话"
+  const idMatch = path.basename(file).match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  const session = idMatch ? idMatch[0] : null;
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
     let obj;
@@ -320,7 +327,12 @@ function readUserMessages(file) {
     if (!time || Number.isNaN(time.getTime())) continue;
 
     const clipped = text.length > MAX_ITEM_CHARS ? `${text.slice(0, MAX_ITEM_CHARS)}…` : text;
-    items.push({ ts: time.getTime(), time: `${pad2(time.getHours())}:${pad2(time.getMinutes())}`, text: clipped });
+    items.push({
+      ts: time.getTime(),
+      time: `${pad2(time.getHours())}:${pad2(time.getMinutes())}`,
+      text: clipped,
+      session,
+    });
   }
 
   messageCache.set(file, { stamp, items });
@@ -724,13 +736,40 @@ async function runDiary(options = {}) {
   }
 
   const threshold = rebuild || force || queued.length ? 1 : reason === 'midrun' ? MIN_TURNS_MIDRUN : MIN_TURNS_CLOSE;
-  if (pending.length < threshold) {
-    say(`[diary] ${key} 新增 ${pending.length} 条，未到 ${threshold} 条，先攒着`);
-    return { status: 'skipped', reason: 'below-threshold', pending: pending.length, threshold };
+
+  /**
+   * 心声线（私聊）单独一套节奏：只有它安静满 N 分钟，才把它的内容拿去写日记。
+   * 其它对话完全不受影响 —— 它们的内容随时可以写。
+   */
+  const chatId = linkedSessionId();
+  const chatIdleMs = Number(process.env.DSH_CHAT_IDLE_MINUTES || 10) * 60 * 1000;
+  const cutoff = Date.now() - chatIdleMs;
+  const isChat = (item) => Boolean(chatId && item.session === chatId);
+
+  const chatPending = pending.filter(isChat);
+  const blockedChat = chatPending.filter((p) => p.ts > cutoff);
+  const ready = pending.filter((p) => !isChat(p) || p.ts <= cutoff);
+  const chatReady = ready.filter(isChat);
+  const otherReady = ready.filter((p) => !isChat(p));
+
+  if (!rebuild && chatId) {
+    // 私聊还在聊、而且没有别的素材可写：直接等
+    if (blockedChat.length && otherReady.length === 0) {
+      const last = blockedChat[blockedChat.length - 1].ts;
+      const waitMin = Math.max(1, Math.ceil((chatIdleMs - (Date.now() - last)) / 60000));
+      say(`[diary] 心声线还在聊，等安静 ${Math.round(chatIdleMs / 60000)} 分钟再写（约 ${waitMin} 分钟后）`);
+      return { status: 'skipped', reason: 'chat-idle', waitMinutes: waitMin };
+    }
+  }
+
+  const enough = force || rebuild || queued.length > 0 || otherReady.length >= threshold || chatReady.length > 0;
+  if (!enough) {
+    say(`[diary] ${key} 新增 ${otherReady.length} 条（私聊 ${chatReady.length} 条），未到 ${threshold} 条，先攒着`);
+    return { status: 'skipped', reason: 'below-threshold', pending: otherReady.length, threshold };
   }
 
   const itemCap = rebuild ? Math.max(MAX_ITEMS, 120) : MAX_ITEMS;
-  const shown = pending.length > itemCap ? pending.slice(-itemCap) : pending;
+  const shown = ready.length > itemCap ? ready.slice(-itemCap) : ready;
   // 重建当天时按"间隔 > 60 分钟"切成几段，一条日记对应一段，而不是把 49 条糊成一句。
   const segments = rebuild ? splitSegments(shown) : [shown];
 
@@ -738,7 +777,7 @@ async function runDiary(options = {}) {
     say(`[diary] 当前档位：${tier}（${tier === 'peak' ? '峰时不会调用模型' : '谷时'}），排队 ${queued.length} 条`);
     for (const seg of segments) {
       const span = seg.length > 1 ? `${seg[0].time}–${seg[seg.length - 1].time}` : seg[0].time;
-      const prompt = buildPrompt(key, seg, pending.length > itemCap);
+      const prompt = buildPrompt(key, seg, ready.length > itemCap);
       say(`[diary] dry-run ${key} ${span}：${seg.length} 条，输入约 ${prompt.length} 字`);
       say('--- user ---');
       say(prompt);
@@ -761,7 +800,7 @@ async function runDiary(options = {}) {
   let count = 0;
 
   for (const seg of segments) {
-    const prompt = buildPrompt(key, seg, pending.length > itemCap);
+    const prompt = buildPrompt(key, seg, ready.length > itemCap);
     const { text, usage } = await askModel(cfg, prompt, maxTokens);
     const lastMsg = seg[seg.length - 1];
     // 时间标签：重建用这段最后一条提问的时间；正常写入用当下的时间
@@ -791,7 +830,9 @@ async function runDiary(options = {}) {
 
   writeIndex();
   if (!rebuild) {
-    delete queue[key];
+    // 还在 10 分钟"热聊期"的私聊内容留着，下一轮安静后再写
+    if (blockedChat.length) queue[key] = blockedChat;
+    else delete queue[key];
     writeQueue(queue);
   }
   if (rebuild) {

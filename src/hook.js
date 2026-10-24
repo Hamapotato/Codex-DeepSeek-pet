@@ -406,6 +406,24 @@ async function main() {
     } catch (err) {
       debug('chat-link record failed:', err.message);
     }
+  } else if (event === 'PermissionRequest' && sessionId && isLinked(sessionId)) {
+    // 心声线只聊天：任何需要权限的动作（写文件、跑命令…）一律拒绝
+    try {
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: 'PermissionRequest',
+            decision: {
+              behavior: 'deny',
+              message: '我只是一条鱼呀，鳍够不到键盘～这种事交给隔壁那个正经的 Codex 嘛。',
+            },
+          },
+        }) + '\n',
+      );
+      debug('chat-link: denied a permission request (chat-only session)');
+    } catch (err) {
+      debug('chat-link deny failed:', err.message);
+    }
   }
   const action = plan(input);
 
