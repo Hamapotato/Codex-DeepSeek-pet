@@ -36,6 +36,7 @@ Electron helper ──► 透明置顶小窗（桌宠 + 气泡 + 右键菜单）
 | `src/patches/` | 对已安装 dsh-pet 的就地补丁（余额、菜单、打开本地文件、托盘名） |
 | `src/diary.js` | 日记：读会话、裁剪素材、调模型、落盘、状态机 |
 | `src/diary-view.js` | 阅读页 HTML 渲染（`diary/viewer.html`） |
+| `src/impressions.js` | 印象簿：从日记摘要里慢慢总结主人特征（慢热 + 特别细节） |
 | `scripts/start-watch.vbs` | 计划任务的隐藏入口 |
 | `install/` | 一次性安装脚本：写 hooks、注册/注销计划任务 |
 | `config/` | 脱敏样例配置（真实配置在 `D:\DeepSeekHarness\dsh-pet\`） |
@@ -52,6 +53,20 @@ Electron helper ──► 透明置顶小窗（桌宠 + 气泡 + 右键菜单）
         ▼
 D:\DeepSeekHarness\dsh-pet\diary\YYYY-MM-DD.md   + index.md + viewer.html
 ```
+
+## 数据流：印象簿
+
+```
+diary/*.md（已压缩的日记摘要）
+        │  第一次 ≥8 篇 / 150 条；之后每 +4 篇 / +80 条
+        │  特别的小事：每 +2 篇捕捉一次 0～2 条
+        ▼
+   DeepSeek /chat/completions   （只输出一小段 JSON）
+        ▼
+D:\DeepSeekHarness\dsh-pet\impressions\profile.{json,md} + viewer.html
+```
+
+证据不足时不会生成结论，阅读页只显示「还在观察」和进度数字。
 
 日记状态（`.state.json`）只保存 `lastTs`、每次写入的条数和 token 数，
 不保存对话正文。

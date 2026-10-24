@@ -1,7 +1,16 @@
 'use strict';
 
 const fs = require('fs');
-const { SPRITE, MENU_MARK, DIARY_MENU_MARK, DIARY_VIEWER_JS, DIARY_VIEWER_URL, syntaxOk } = require('./shared');
+const {
+  SPRITE,
+  MENU_MARK,
+  DIARY_MENU_MARK,
+  IMPRESSION_MENU_MARK,
+  DIARY_VIEWER_JS,
+  DIARY_VIEWER_URL,
+  IMPRESSION_VIEWER_JS,
+  syntaxOk,
+} = require('./shared');
 
 function patchMenu() {
   if (!fs.existsSync(SPRITE)) {
@@ -88,6 +97,34 @@ function patchMenu() {
     if (!text.includes(DIARY_MENU_MARK)) text = `${text}\n${DIARY_MENU_MARK}\n`;
   }
 
+  // ---- 3) 「我的印象」菜单项 + 点击处理（可重复执行）------------------------
+  {
+    const chatLine = "      { label: '对话', action: 'chat' },";
+    const diaryItem = "      { label: '查看日记', action: 'open-diary' },";
+    const openSiteAnchor = "    if (leaf.action === 'open-site') {";
+
+    if (!text.includes("label: '我的印象'")) {
+      const anchor = text.includes(diaryItem) ? diaryItem : chatLine;
+      if (text.includes(anchor)) {
+        text = text.replace(anchor, `${anchor}\n      { label: '我的印象', action: 'open-impression' },`);
+      }
+    }
+
+    if (!text.includes("leaf.action === 'open-impression'")) {
+      const handler = [
+        "    if (leaf.action === 'open-impression') {",
+        '      // patched: 打开本地「印象簿」页面（shell.openPath）',
+        `      if (window.petBridge && window.petBridge.openLocalFile) window.petBridge.openLocalFile('${IMPRESSION_VIEWER_JS}');`,
+        '      return;',
+        '    }',
+      ].join('\n');
+      if (text.includes(openSiteAnchor)) {
+        text = text.replace(openSiteAnchor, `${handler}\n${openSiteAnchor}`);
+      }
+    }
+    if (!text.includes(IMPRESSION_MENU_MARK)) text = `${text}\n${IMPRESSION_MENU_MARK}\n`;
+  }
+
   if (text === original) {
     console.log('sprite.js menu patch already applied');
     return true;
@@ -106,7 +143,9 @@ function patchMenu() {
     (check.match(/label: '工具'/g) || []).length === 1 &&
     check.includes('toolMenu, more ?') &&
     check.includes("label: '查看日记'") &&
-    check.includes("leaf.action === 'open-diary'");
+    check.includes("leaf.action === 'open-diary'") &&
+    check.includes("label: '我的印象'") &&
+    check.includes("leaf.action === 'open-impression'");
   if (!ok) {
     fs.writeFileSync(SPRITE, original);
     console.error('sprite.js: menu patch failed verification, restored');

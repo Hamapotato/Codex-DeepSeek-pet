@@ -16,6 +16,8 @@ Codex 的 lifecycle hooks 在每一轮对话中调用 `hook.js`，通过 dsh-pet
 - **只在谷时花钱**：工作日的峰时段（9–12、14–18）不调用模型，只把素材记下来排队，
   等谷时（或下次启动 Codex 时已经是谷时）再补写。
 - **日记阅读页**：右键菜单「查看日记」，按时间倒序的卡片流，字体与余额气泡一致。
+- **印象簿**：攒够很多篇日记后才慢慢总结"你是个什么样的人"，平时只偶尔记下特别的小事；
+  右键菜单「我的印象」看结果，同样只存在本机。
 - **按需启动**：开机不自启；Codex 启动时才拉起看门狗和桌宠，Codex 关闭后桌宠留着你手动关。
 - **自愈补丁**：dsh-pet 升级后，启动器会重新打上余额 / 菜单 / 打开的本地文件等补丁。
 
@@ -32,6 +34,7 @@ D:/WORK/Codex-DeepSeek-pet/
 │  ├─ standalone-launcher.js   先跑补丁，再启动独立模式（失败回退原版）
 │  ├─ diary.js                 日记：读会话 / 裁素材 / 调模型 / 落盘 / 状态机
 │  ├─ diary-view.js            日记阅读页渲染（viewer.html）
+│  ├─ impressions.js           印象簿：从日记里慢慢总结"你是什么样的人"
 │  └─ patches/                 对已安装 dsh-pet 的就地补丁
 │     ├─ index.js              补丁总入口（npm run build）
 │     ├─ shared.js             路径、标记、syntaxOk、patchHelper
@@ -363,6 +366,56 @@ D:\DeepSeekHarness\dsh-pet\diary\
   2. 手动执行 `npm run diary:rebuild`。
 - 看门狗和手动命令可能同时想写，用 `diary/.write.lock` 互斥，拿不到锁就跳过这一轮，
   不会把同一条写两遍。
+
+## 印象簿（大肥鱼眼里的你）
+
+从**已经压缩过的日记**里慢慢读出"你是什么样的人"——不是每句话都分析，也不急着下结论。
+
+### 什么时候才下结论
+
+| 阶段 | 条件 | 行为 |
+|---|---|---|
+| 第一次形成印象 | ≥ **8 篇**日记 或 ≈ **150 条**对话 | 才会请你"说说主人是什么样的人" |
+| 之后更新 | 新增 ≥ **4 篇** 或 ≈ **80 条** | 在旧印象基础上小幅修正 |
+| 特别的小事 | 每新增 **2 篇**日记 | 单独问一次"有没有值得记住的细节"，模型可以什么都不记 |
+| 峰时 | 任意 | 不调用模型，等谷时 |
+
+证据不够时页面显示「我还不打算这么早给你下结论」，并给出当前进度
+（已看 5/8 篇、48/150 条），不会硬凑一个性格标签。
+
+### 记什么
+
+- **你是**：身份 / 在做的事（没把握就写"还不确定"）
+- **性格**：0–5 个关键词（可以少写甚至不写）
+- **习惯 / 偏好**：0–4 条
+- **特别的小事**：0–2 条很特别、值得记住的细节（累计保存，最多 10 条）
+- **想对你说**：一句大肥鱼自己的话
+
+素材只用最近的日记摘要 + 上一版印象，所以一次分析输入约 1～2k token，
+细节捕捉只有几百 token；输出上限 800 / 400 token。
+
+### 存放与查看
+
+```
+D:\DeepSeekHarness\dsh-pet\impressions\
+├─ profile.json     结构化印象
+├─ profile.md       人读版
+├─ viewer.html      阅读页（字体与余额气泡一致）
+├─ .state.json      进度（上次分析时的日记数/条数）
+└─ archive\         早期或重建前的版本
+```
+
+右键桌宠 →「我的印象」；或：
+
+```sh
+npm run impression         # 手动跑一次（仍受门槛/峰时限制）
+npm run impression:view    # 只重建阅读页
+npm run impression:open    # 重建并打开
+node src/impressions.js --force   # 无视门槛立即分析
+```
+
+门槛都能用环境变量调：`DSH_IMPRESSION_FIRST_ENTRIES`(8)、`DSH_IMPRESSION_FIRST_MESSAGES`(150)、
+`DSH_IMPRESSION_MIN_ENTRIES`(4)、`DSH_IMPRESSION_MIN_MESSAGES`(80)、`DSH_IMPRESSION_HIGHLIGHT_ENTRIES`(2)。
 
 失败不影响桌宠启停——写入过程最多占 45 秒，异常只记进 `%LOCALAPPDATA%\dsh-pet-codex\watch.log`。
 

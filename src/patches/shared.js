@@ -57,6 +57,7 @@ const STARTUP_MARK = '/* dsh-pet startup balance patch */';
 const ROWS_MARK = '/* dsh-pet balance row patch */';
 const MENU_MARK = '/* dsh-pet menu patch v2 */';
 const DIARY_MENU_MARK = '/* dsh-pet diary menu patch */';
+const IMPRESSION_MENU_MARK = '/* dsh-pet impression menu patch */';
 const OPEN_PATH_MARK = '/* dsh-pet open-path patch */';
 const NAME_MARK = '/* dsh-pet name patch */';
 const PET_NAME = '大肥鱼';
@@ -64,6 +65,8 @@ const PET_NAME = '大肥鱼';
 const DIARY_VIEWER = path.resolve(PKG, '..', '..', '..', '..', 'dsh-pet', 'diary', 'viewer.html');
 const DIARY_VIEWER_JS = DIARY_VIEWER.replace(/\\/g, '\\\\'); // JS 字符串字面量里的 Windows 路径
 const DIARY_VIEWER_URL = `file:///${DIARY_VIEWER.replace(/\\/g, '/')}`;
+const IMPRESSION_VIEWER = path.join(path.dirname(path.dirname(DIARY_VIEWER)), 'impressions', 'viewer.html');
+const IMPRESSION_VIEWER_JS = IMPRESSION_VIEWER.replace(/\\/g, '\\\\');
 const BALANCE_HOLD_MS = 24 * 60 * 60 * 1000;
 // Balance bubble scale (1 = stock). The money bubble is the only plain
 // `.pet-bubble`; whisper/work bubbles carry `.is-whisper`, so they are untouched.
@@ -158,12 +161,15 @@ module.exports = {
   ROWS_MARK,
   MENU_MARK,
   DIARY_MENU_MARK,
+  IMPRESSION_MENU_MARK,
   OPEN_PATH_MARK,
   NAME_MARK,
   PET_NAME,
   DIARY_VIEWER,
   DIARY_VIEWER_JS,
   DIARY_VIEWER_URL,
+  IMPRESSION_VIEWER,
+  IMPRESSION_VIEWER_JS,
   BALANCE_HOLD_MS,
   BALANCE_BUBBLE_SCALE,
   PREAMBLE,

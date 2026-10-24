@@ -386,7 +386,7 @@ function postJson(urlString, headers, body, timeoutMs) {
   });
 }
 
-async function askModel(cfg, userPrompt, maxTokens) {
+async function askModel(cfg, userPrompt, maxTokens, systemPrompt = SYSTEM_PROMPT) {
   const base = String(cfg.baseUrl).replace(/\/+$/, '');
   const res = await postJson(
     `${base}/chat/completions`,
@@ -394,7 +394,7 @@ async function askModel(cfg, userPrompt, maxTokens) {
     {
       model: cfg.model,
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
       max_tokens: maxTokens,
@@ -845,4 +845,15 @@ if (require.main === module) {
     });
 }
 
-module.exports = { runDiary, dayKey, extractAsks, listDiaries, pendingDates, pricingTier };
+module.exports = {
+  runDiary,
+  dayKey,
+  extractAsks,
+  listDiaries,
+  pendingDates,
+  pricingTier,
+  allEntries,
+  readState,
+  readAiConfig,
+  askModel,
+};

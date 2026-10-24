@@ -184,4 +184,4 @@ function writeViewer(entries, diaryDir) {
 const SECTION_RE = /^##\s+(\d{1,2}:\d{2})\s*(?:·\s*(\d+)\s*件事)?/;
 
 /** 把某一天的文件读成 [{ time, text, count, tokens }]（按写入顺序）。 */
-module.exports = { writeViewer };
+module.exports = { writeViewer, fontDataUrl, FONT_FAMILY };

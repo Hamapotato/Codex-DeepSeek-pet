@@ -24,6 +24,7 @@ const http = require('http');
 const net = require('net');
 const { execFileSync, spawn } = require('child_process');
 const { runDiary, dayKey, pendingDates } = require('./diary');
+const { runImpressions, captureHighlights } = require('./impressions');
 const {
   STATE_DIR,
   DSH_HOME,
@@ -186,6 +187,7 @@ async function main() {
   log(`watchdog started (pid ${process.pid})${once ? ' [once]' : ''}`);
   // 上次峰时攒下的素材：这次启动如果已经是谷时，先补写。
   await flushQueued();
+  await impressions();
   let wasRunning = false;
   // 跨天：Codex 连续开着时，午夜过后把"昨天"的日记补上。
   let currentDay = dayKey();
@@ -208,11 +210,13 @@ async function main() {
         pollsSinceDiaryCheck = 0;
         await flushQueued();
         await diary(today, 'midrun');
+        await impressions();
       }
     } else if (running === false && wasRunning) {
       // Codex closed -> write today's diary, then leave the pet alone: it stays
       // on the desktop until the user closes it by hand.
       await diary(today, 'codex-close');
+      await impressions();
       if (exitOnClose) {
         log('codex closed — pet left running, watchdog exiting');
         process.exit(0);
@@ -256,6 +260,25 @@ async function flushQueued() {
   for (const date of pendingDates()) {
     if (date === today) continue;
     await diary(date, 'flush');
+  }
+}
+
+/** 「印象簿」：日记/对话攒够量才更新，峰时自动跳过。最多占 45 秒。 */
+async function impressions() {
+  try {
+    // 先补记「特别的小事」（便宜：只喂最近两篇日记）
+    await Promise.race([captureHighlights({ quiet: true }), sleep(30_000)]);
+    const result = await Promise.race([
+      runImpressions({ quiet: true }),
+      sleep(45_000).then(() => ({ status: 'timeout' })),
+    ]);
+    if (result.status === 'written') {
+      log(`impressions updated (based on ${result.profile.basedOnDiary} diaries)`);
+    } else if (result.status === 'skipped' && result.reason !== 'below-threshold') {
+      log(`impressions skipped: ${result.reason}`);
+    }
+  } catch (err) {
+    log('impressions failed: ' + err.message);
   }
 }
 
