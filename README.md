@@ -417,6 +417,58 @@ node src/impressions.js --force   # 无视门槛立即分析
 门槛都能用环境变量调：`DSH_IMPRESSION_FIRST_ENTRIES`(8)、`DSH_IMPRESSION_FIRST_MESSAGES`(150)、
 `DSH_IMPRESSION_MIN_ENTRIES`(4)、`DSH_IMPRESSION_MIN_MESSAGES`(80)、`DSH_IMPRESSION_HIGHLIGHT_ENTRIES`(2)。
 
+## 心声线（和桌宠聊天的那条对话）
+
+给桌宠单开一条 Codex 对话当"聊天窗"。这条对话是**双向**的，其它对话仍然是单向素材。
+
+| 对话 | 关系 |
+|---|---|
+| 被绑定的那条 | **双向**：注入人设 + 日记 + 印象 + 共同记忆；每轮结束把这一问一答写回共享记忆 |
+| 其它所有对话 | **单向**：只被日记 / 印象当作素材，看不到桌宠的记忆，也不会被改写 |
+
+### 绑定
+
+在你想要当作"和桌宠聊天"的那条对话里执行：
+
+```sh
+npm run pet:link      # 绑定这条对话（用最近一次 hook 事件的会话 id）
+npm run pet:status    # 看绑到了哪条
+npm run pet:unlink    # 解除
+
+node src/chat-link.js --link <sessionId>   # 显式指定
+node src/chat-link.js --context            # 预览会注入的上下文
+```
+
+绑定关系存在 `D:\DeepSeekHarness\dsh-pet\chat-link.json`。
+
+### 每一轮发生了什么
+
+```
+你在这条对话里说话
+   └─ UserPromptSubmit
+        └─ hook 注入 additionalContext：
+             大肥鱼人设 + 最近 3 篇日记 + 印象 + 最近 12 条共同记忆
+             并说明"以 大肥鱼 的身份回复"
+   └─ 模型以桌宠身份回答
+   └─ Stop
+        └─ 从 transcript 取"最后一问 + 最后一答"写进 memory.json
+```
+
+桌宠自己的聊天窗读写的是**同一个** `D:\DeepSeekHarness\dsh-pet\memory.json`，
+所以两边共享记忆（只保留最近 200 条）。
+
+### 同步范围
+
+| 内容 | 方向 | 说明 |
+|---|---|---|
+| 桌宠设定（名字/人设） | 桌宠 → 对话 | 每轮注入，改 `main-config.jsonc` 的 `name` 立即生效 |
+| 日记 | 桌宠 → 对话 | 最近 3 篇摘要注入；完整内容看「查看日记」 |
+| 印象 | 桌宠 → 对话 | 身份/性格/习惯注入；证据不足时明确写"还没结论" |
+| 对话记忆 | 双向 | 对话写入 `memory.json`；桌宠聊天窗也读写它 |
+
+整个过程不额外调用模型（说话的是 Codex 自己），所以**不消耗额外 token**，
+也不受峰谷限制。
+
 失败不影响桌宠启停——写入过程最多占 45 秒，异常只记进 `%LOCALAPPDATA%\dsh-pet-codex\watch.log`。
 
 ### 手动命令

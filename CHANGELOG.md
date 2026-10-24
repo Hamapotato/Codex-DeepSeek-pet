@@ -7,6 +7,18 @@
 
 _暂无_
 
+## [1.4.0] - 2026-10-25
+
+### Added
+
+- **心声线（chat-link）**：把一条指定的 Codex 对话绑定成"和桌宠聊天"的窗口。
+  - 每轮 `UserPromptSubmit` 注入：大肥鱼人设 + 最近 3 篇日记 + 印象 + 最近 12 条共同记忆，
+    并指示模型以桌宠身份回复。
+  - 每轮 `Stop` 从 transcript 取最后一问一答，写进桌宠的 `memory.json`（去重，保留 200 条）。
+  - 桌宠自己的聊天窗读写同一份 `memory.json` → 两边共享记忆。
+  - 其它对话保持单向：只作为日记/印象素材，不受影响。
+- `npm run pet:link` / `pet:unlink` / `pet:status`；`chat-link.js --link <sessionId>` 可显式指定。
+
 ## [1.3.0] - 2026-10-25
 
 ### Added

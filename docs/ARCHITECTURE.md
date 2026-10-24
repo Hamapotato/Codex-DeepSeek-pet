@@ -37,6 +37,7 @@ Electron helper ──► 透明置顶小窗（桌宠 + 气泡 + 右键菜单）
 | `src/diary.js` | 日记：读会话、裁剪素材、调模型、落盘、状态机 |
 | `src/diary-view.js` | 阅读页 HTML 渲染（`diary/viewer.html`） |
 | `src/impressions.js` | 印象簿：从日记摘要里慢慢总结主人特征（慢热 + 特别细节） |
+| `src/chat-link.js` | 心声线：绑定一条对话，双向同步人设/日记/印象/记忆 |
 | `scripts/start-watch.vbs` | 计划任务的隐藏入口 |
 | `install/` | 一次性安装脚本：写 hooks、注册/注销计划任务 |
 | `config/` | 脱敏样例配置（真实配置在 `D:\DeepSeekHarness\dsh-pet\`） |
@@ -67,6 +68,21 @@ D:\DeepSeekHarness\dsh-pet\impressions\profile.{json,md} + viewer.html
 ```
 
 证据不足时不会生成结论，阅读页只显示「还在观察」和进度数字。
+
+## 数据流：心声线
+
+```
+绑定的那条对话                      其它对话
+   │ UserPromptSubmit                  │
+   ▼                                   ▼
+hook 注入：人设+日记+印象+记忆      只作为日记/印象素材（单向）
+   │                                   │
+   ▼                                   ▼
+模型以「大肥鱼」身份回答            diary / impressions
+   │ Stop
+   ▼
+memory.json  （桌宠聊天窗读写同一份）
+```
 
 日记状态（`.state.json`）只保存 `lastTs`、每次写入的条数和 token 数，
 不保存对话正文。
