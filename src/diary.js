@@ -42,6 +42,8 @@ const AI_CONFIG = path.join(DSH_HOME, 'dsh-pet', 'standalone-ai.json');
 const STATE_FILE = path.join(DIARY_DIR, '.state.json');
 // 重建期间挡住看门狗的自动写入（否则它会读到被清空的状态，抢先写一条）
 const LOCK_FILE = path.join(DIARY_DIR, '.rebuild.lock');
+// 峰时先记账、谷时再写：待写素材按日期排队
+const PENDING_FILE = path.join(DIARY_DIR, '.pending.json');
 
 const MAX_ITEMS = 40;
 const MAX_ITEM_CHARS = 140;
@@ -54,9 +56,9 @@ const DEFAULT_MAX_TOKENS = Number(process.env.DSH_DIARY_MAX_TOKENS || 900);
 
 const SYSTEM_PROMPT = [
   '你是「大肥鱼」——一只住在主人桌面上的蓝色胖鱼，爱玩魔方、爱吃零食，说话懒散又有点小得意。',
-  '请根据"这一段主人让我做的事"，写一小段日记。',
-  '要求：第一人称；先用一句话概括这一段帮主人做了什么，再写一句自己的感受、吐槽或小心思；',
-  '总长 60～100 个汉字；只输出正文，不要标题、不要列表、不要 Markdown、不要引号，也不要提"这一段"。',
+  '下面列着主人这一段时间让 Codex 做的事。你可以照着写今天的日记，也可以完全不写这些事。',
+  '写什么都行：吐槽、抱怨、愿望、发呆时冒出来的念头、对主人的评价、想吃的零食，想到什么写什么。',
+  '第一人称，自然口语，60～200 个汉字；只输出正文，不要标题、不要列表、不要 Markdown、不要引号。',
 ].join('');
 
 // ---------------------------------------------------------------------------
@@ -94,6 +96,53 @@ function rebuildInProgress() {
   } catch {
     return false;
   }
+}
+
+/**
+ * DeepSeek 计价档位（北京时间，工作日 9–12、14–18 为峰）。
+ * 峰时不调用模型：只把待写素材记进 .pending.json，等谷时再上传。
+ */
+function pricingTier(now = new Date()) {
+  // 测试/应急：DSH_DIARY_FORCE_TIER=peak|idle 可强制档位
+  const forced = String(process.env.DSH_DIARY_FORCE_TIER || '').trim();
+  if (forced === 'peak' || forced === 'idle') return forced;
+  const day = now.getDay(); // 0 = 周日
+  if (day === 0 || day === 6) return 'idle';
+  const h = now.getHours();
+  return (h >= 9 && h < 12) || (h >= 14 && h < 18) ? 'peak' : 'idle';
+}
+
+function readQueue() {
+  try {
+    const q = JSON.parse(fs.readFileSync(PENDING_FILE, 'utf8'));
+    return q && typeof q === 'object' ? q : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeQueue(queue) {
+  fs.mkdirSync(DIARY_DIR, { recursive: true });
+  fs.writeFileSync(PENDING_FILE, JSON.stringify(queue, null, 2), 'utf8');
+}
+
+/** 按 (时间戳, 文本) 去重后按时间排序。 */
+function dedupeItems(items) {
+  const seen = new Set();
+  const out = [];
+  for (const it of items) {
+    const sig = `${it.ts}|${it.text}`;
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    out.push(it);
+  }
+  return out.sort((a, b) => a.ts - b.ts);
+}
+
+/** 有排队素材的日期（看门狗用来在启动/谷时补写）。 */
+function pendingDates() {
+  const q = readQueue();
+  return Object.keys(q).filter((k) => Array.isArray(q[k]) && q[k].length > 0);
 }
 
 /** 密钥、长 token 之类不写进提示词，避免日记把敏感串带上。 */
@@ -597,9 +646,28 @@ async function runDiary(options = {}) {
   // dry-run 只演算，不动磁盘
   const day = rebuild ? (dryRun ? {} : state[key] || {}) : state[key] || {};
   const lastTs = Number(day.lastTs) || 0;
-  const pending = asks.filter((a) => a.ts > lastTs);
+  const fresh = asks.filter((a) => a.ts > lastTs);
 
-  const threshold = rebuild || force ? 1 : reason === 'midrun' ? MIN_TURNS_MIDRUN : MIN_TURNS_CLOSE;
+  const queue = rebuild ? {} : readQueue();
+  const queued = Array.isArray(queue[key]) ? queue[key] : [];
+  const pending = dedupeItems([...queued, ...fresh]);
+  const tier = pricingTier();
+  const ignorePeak = process.env.DSH_DIARY_IGNORE_PEAK === '1';
+
+  // 峰时：只把素材记下来排队，绝不调用模型；等谷时（或下次启动 Codex 且是谷时）再写。
+  if (!rebuild && !dryRun && !ignorePeak && tier === 'peak') {
+    if (pending.length) {
+      queue[key] = pending;
+      writeQueue(queue);
+      say(`[diary] 峰时，先记下 ${pending.length} 条（其中排队 ${queued.length} 条），谷时再写`);
+      if (reason === 'codex-close') await notifyPet('峰时先不写啦，谷时再补～');
+      return { status: 'queued', pending: pending.length, tier };
+    }
+    say('[diary] 峰时且没有新素材，跳过');
+    return { status: 'skipped', reason: 'peak-empty', tier };
+  }
+
+  const threshold = rebuild || force || queued.length ? 1 : reason === 'midrun' ? MIN_TURNS_MIDRUN : MIN_TURNS_CLOSE;
   if (pending.length < threshold) {
     say(`[diary] ${key} 新增 ${pending.length} 条，未到 ${threshold} 条，先攒着`);
     return { status: 'skipped', reason: 'below-threshold', pending: pending.length, threshold };
@@ -611,6 +679,7 @@ async function runDiary(options = {}) {
   const segments = rebuild ? splitSegments(shown) : [shown];
 
   if (dryRun) {
+    say(`[diary] 当前档位：${tier}（${tier === 'peak' ? '峰时不会调用模型' : '谷时'}），排队 ${queued.length} 条`);
     for (const seg of segments) {
       const span = seg.length > 1 ? `${seg[0].time}–${seg[seg.length - 1].time}` : seg[0].time;
       const prompt = buildPrompt(key, seg, pending.length > itemCap);
@@ -660,6 +729,10 @@ async function runDiary(options = {}) {
   }
 
   writeIndex();
+  if (!rebuild) {
+    delete queue[key];
+    writeQueue(queue);
+  }
   if (rebuild) {
     try {
       fs.unlinkSync(LOCK_FILE);
@@ -724,4 +797,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { runDiary, dayKey, extractAsks, listDiaries };
+module.exports = { runDiary, dayKey, extractAsks, listDiaries, pendingDates, pricingTier };

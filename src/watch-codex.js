@@ -23,7 +23,7 @@ const path = require('path');
 const http = require('http');
 const net = require('net');
 const { execFileSync, spawn } = require('child_process');
-const { runDiary, dayKey } = require('./diary');
+const { runDiary, dayKey, pendingDates } = require('./diary');
 const {
   STATE_DIR,
   DSH_HOME,
@@ -184,6 +184,8 @@ async function main() {
   const exitOnClose = process.argv.includes('--exit-on-codex-close');
   const startedAt = Date.now();
   log(`watchdog started (pid ${process.pid})${once ? ' [once]' : ''}`);
+  // 上次峰时攒下的素材：这次启动如果已经是谷时，先补写。
+  await flushQueued();
   let wasRunning = false;
   // 跨天：Codex 连续开着时，午夜过后把"昨天"的日记补上。
   let currentDay = dayKey();
@@ -204,6 +206,7 @@ async function main() {
       // Codex 一直开着：攒够一大段就写一条，不等关闭。
       if (++pollsSinceDiaryCheck >= 12) {
         pollsSinceDiaryCheck = 0;
+        await flushQueued();
         await diary(today, 'midrun');
       }
     } else if (running === false && wasRunning) {
@@ -244,6 +247,15 @@ async function diary(date, reason) {
     log(`diary ${date} (${reason}): ${result.status}${result.reason ? '/' + result.reason : ''}`);
   } catch (err) {
     log(`diary ${date} (${reason}) failed: ${err.message}`);
+  }
+}
+
+/** 把之前峰时排队、还没写的日期补写掉（当天由 diary() 自己处理）。 */
+async function flushQueued() {
+  const today = dayKey();
+  for (const date of pendingDates()) {
+    if (date === today) continue;
+    await diary(date, 'flush');
   }
 }
 
