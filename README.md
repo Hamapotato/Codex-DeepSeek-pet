@@ -4,19 +4,42 @@ Codex 的 lifecycle hooks 在每一轮对话中调用 `hook.js`，通过 dsh-pet
 让桌面宠物播放动画 / 弹气泡。桌宠本体是安装在 DSH 里的 `dsh-pet`
 （显示名 **大肥鱼**），这里只放联动脚本和对官方包的本机补丁。
 
+本机当前部署位置：`D:\WORK\Codex-DeepSeek-pet`（同时也是 GitHub 上游仓库
+`Hamapotato/Codex-DeepSeek-pet` 的工作副本）。`%USERPROFILE%\.codex\dsh-pet` 已不再使用。
+
+## 功能
+
+- **事件联动**：Codex 开始思考 / 调工具 / 要权限 / 结束 / 被打断，桌宠播对应动画并弹一句气泡。
+- **余额常驻**：DeepSeek 余额挂在头顶，`余额：¥57.85（谷）`，平时绿色、峰时段金色，30 秒刷新。
+- **自动日记**：把当天**所有** Codex 对话（不分项目）压成一小段日记，一天可以写多条；
+  Codex 关闭时攒够 3 条就写，运行中攒够 12 条也写，写完桌宠弹「日记写好了～」。
+- **日记阅读页**：右键菜单「查看日记」，按时间倒序的卡片流，字体与余额气泡一致。
+- **按需启动**：开机不自启；Codex 启动时才拉起看门狗和桌宠，Codex 关闭后桌宠留着你手动关。
+- **自愈补丁**：dsh-pet 升级后，启动器会重新打上余额 / 菜单 / 打开的本地文件等补丁。
+
 ## 目录结构
 
 ```
-~/.codex/dsh-pet/
-├─ hook.js                     Codex hook 入口（只 require src/hook.js）
-├─ start-watch.vbs             计划任务的隐藏入口 → src/watch-codex.js
-├─ package.json                npm run build / check / launch / watch
+D:/WORK/Codex-DeepSeek-pet/
+├─ hook.js                     Codex hook 入口（只 require src/hook.js，必须留在根目录）
+├─ package.json                脚本入口（build / check / launch / watch / diary:*）
 ├─ src/
-│  ├─ config.js                所有路径、端口、状态目录常量
+│  ├─ config.js                所有路径 / 端口 / 状态目录
 │  ├─ hook.js                  事件映射、宿主发现、必要时拉起
-│  ├─ watch-codex.js           看门狗（Codex 启动时拉起桌宠，关闭时收掉）
-│  ├─ standalone-launcher.js   重建补丁 → 启动独立模式（失败回退原版）
-│  └─ build-patches.js         对已安装 dsh-pet 打就地补丁
+│  ├─ watch-codex.js           看门狗：启动时拉起桌宠；关闭时写日记后退出（桌宠留着）
+│  ├─ standalone-launcher.js   先跑补丁，再启动独立模式（失败回退原版）
+│  ├─ diary.js                 日记：读会话 / 裁素材 / 调模型 / 落盘 / 状态机
+│  ├─ diary-view.js            日记阅读页渲染（viewer.html）
+│  └─ patches/                 对已安装 dsh-pet 的就地补丁
+│     ├─ index.js              补丁总入口（npm run build）
+│     ├─ shared.js             路径、标记、syntaxOk、patchHelper
+│     ├─ balance.js            余额气泡（常驻 / 格式化 / 配色 / 首次渲染）
+│     ├─ menu.js               右键菜单分组 + 「查看日记」
+│     ├─ openpath.js           pet:open-path 通道（打开本地文件）
+│     └─ name.js               托盘提示改叫「大肥鱼」
+├─ scripts/
+│  ├─ start-watch.vbs          计划任务的隐藏入口 → src/watch-codex.js
+│  └─ legacy/                  已停用的旧开机项（仅备查）
 ├─ config/                     脱敏的配置样例（不含任何密钥）
 │  ├─ main-config.sample.jsonc 桌宠名/位置/开关/刷新频率
 │  ├─ standalone-ai.sample.json 碎碎念/对话的模型配置
@@ -25,8 +48,8 @@ Codex 的 lifecycle hooks 在每一轮对话中调用 `hook.js`，通过 dsh-pet
 │  ├─ apply-hooks.js           写入/更新/移除 config.toml 的 hook 段
 │  ├─ register-task.ps1        注册「Codex 启动」计划任务
 │  └─ unregister-task.ps1      移除计划任务
-├─ archive/
-│  └─ startup-item-disabled/   已停用的旧开机项
+├─ docs/ARCHITECTURE.md        数据流 / 各模块职责 / 补丁机制
+├─ CHANGELOG.md                变更记录
 └─ README.md
 ```
 
@@ -34,7 +57,7 @@ Codex 的 lifecycle hooks 在每一轮对话中调用 `hook.js`，通过 dsh-pet
   **信任记录**都按这个路径生成；换成 `src/hook.js` 会让 Codex 重新要求信任。
 - 所有路径集中在 `src/config.js`：换机器 / 换 DSH 安装目录只改这一处，
   也可以用环境变量 `DSH_HOME`、`DSH_PET_PORT`、`DSH_PET_STANDALONE_JS` 覆盖。
-- `start-watch.vbs` 会用自身位置推算项目根目录、用 `%ProgramFiles%` 找 node，
+- `scripts/start-watch.vbs` 会用自身位置推算项目根目录、用 `%ProgramFiles%` 找 node，
   整个目录可以平移到别的路径，不需要改脚本。
 
 ## 从零部署（另一台机器）
@@ -42,7 +65,7 @@ Codex 的 lifecycle hooks 在每一轮对话中调用 `hook.js`，通过 dsh-pet
 前提：Windows、Node.js ≥ 18、已安装 DeepSeek Harness（含 dsh-pet 0.3.8+）、
 Codex 桌面版。
 
-1. **放代码**：把整个项目放到任意目录（例如 `%USERPROFILE%\.codex\dsh-pet`）。
+1. **放代码**：把整个项目放到任意目录（例如 `D:\WORK\Codex-DeepSeek-pet`）。
 2. **确认 DSH 路径**：默认 `D:\DeepSeekHarness`。不同的话设用户环境变量
    `DSH_HOME`（或在 `src/config.js` 里改默认值）。
 3. **配置桌宠**：
@@ -52,7 +75,7 @@ Codex 桌面版。
 4. **打补丁并试跑**：
 
    ```sh
-   node src/build-patches.js
+   node src/patches/index.js
    node src/standalone-launcher.js
    node hook.js --check
    ```
@@ -119,16 +142,17 @@ Chromium profile 和 DPI 缓存。
 `Microsoft-Windows-AppModel-Runtime/Admin` 写一条事件 201
 （`ApplicationName = OpenAI.Codex_2p2nqsd0c76g0!App`，
 `Message = [LaunchProcess]`），计划任务 `dsh-pet-on-codex-launch`
-用这个事件触发 `start-watch.vbs` 拉起看门狗，所以开机后什么都不会跑：
+用这个事件触发 `scripts/start-watch.vbs` 拉起看门狗，所以开机后什么都不会跑：
 
 - 每 5 秒用 `tasklist` 看有没有 `codex.exe` / `ChatGPT.exe`；
 - 发现 Codex **从无到有**且桌宠没在跑，就用隐藏 VBScript（经 Explorer）拉起独立模式；
-- 发现 Codex **从有到无**（进程退出）时，带 runtime token POST `/shutdown`
-  让桌宠自己退出，连 Electron 小窗一起收掉。只在这个"关闭边沿"动手，
+- 发现 Codex **从有到无**（进程退出）时，只写当天日记，**不动桌宠**——
+  桌宠继续留在桌面上，直到你自己关掉它。只在这个"关闭边沿"动手，
   Codex 本来就没开时手动启动的桌宠不受影响；
 - 桌宠还活着时不会重复启动；Codex 开着时手动退出桌宠，看门狗不会主动复活，
   但下一次 Codex 事件（提问/工具/结束）会让 hook 兜底拉起；
-- 看门狗带 `--exit-on-codex-close` 跑：Codex 一关闭，收掉桌宠后自己也退出；
+- 看门狗带 `--exit-on-codex-close` 跑：Codex 一关闭，写完日记后**看门狗自己**退出；
+  桌宠不跟着退，你手动关它即可；
   触发后 3 分钟内没看到 Codex（误触发）也会自己退出。
 
 触发方式（不是开机项）：
@@ -138,7 +162,7 @@ Chromium profile 和 DPI 缓存。
   触发器  事件 Microsoft-Windows-AppModel-Runtime/Admin, EventID 201
           EventData/ApplicationName = OpenAI.Codex_2p2nqsd0c76g0!App
           EventData/Message = [LaunchProcess]
-  动作    explorer.exe "C:\Users\potato\.codex\dsh-pet\start-watch.vbs"
+  动作    explorer.exe "D:\WORK\Codex-DeepSeek-pet\scripts\start-watch.vbs"
 ```
 
 任务通过 `explorer.exe` 转一手，是为了让桌宠脱离 Codex 的进程 job（直接子进程会随 Codex 一起被杀）。
@@ -149,7 +173,7 @@ Chromium profile 和 DPI 缓存。
 手动跑一次看门狗逻辑（会立即拉起还没运行的桌宠）：
 
 ```sh
-"C:/PROGRA~1/nodejs/node.exe" "C:/Users/potato/.codex/dsh-pet/src/watch-codex.js" --once
+"C:/PROGRA~1/nodejs/node.exe" "D:/WORK/Codex-DeepSeek-pet/src/watch-codex.js" --once
 ```
 
 配合 `hook.js` 的双保险：即使看门狗没起来，Codex 触发 hook 时发现桌宠不在也会拉起。
@@ -193,7 +217,7 @@ Chromium profile 和 DPI 缓存。
 ## 余额（独立模式，不依赖 DSH）
 
 原生独立模式的余额路由固定报 `unsupported`（provider 是占位符 `standalone`，凭证解析恒空）。
-这里用一个**旁路构建**补上：`src/build-patches.js` 读取官方 bundle，生成
+这里用一个**旁路构建**补上：`src/patches/` 读取官方 bundle，生成
 `lib/standalone-codex.js`（原文件不动），只改两处：
 
 - 余额查询的 provider 固定为内置的 `deepseek-official`；
@@ -248,8 +272,95 @@ key 的查找顺序：
 也就是每 30 秒拉一次余额。另外 `hook.js` 在 Codex 每轮 `Stop`（一轮结束、刚花完 token）
 之后会立刻触发一次刷新，所以余额在回复结束约 0.2–1 秒内就会更新，不必等下一拍轮询。
 
-- 临时强制重建：`node src/build-patches.js --force`。dsh-pet 升级后启动器会自动重建；
+- 临时强制重建：`node src/patches/index.js --force`。dsh-pet 升级后启动器会自动重建；
   若上游改动导致锚点找不到，构建会报错并保持原版（余额重新变成不支持/10 秒消失，不会崩）。
+
+## 日记
+
+大肥鱼会把**你让 Codex 干的活**写成一小段日记，带上它自己的情绪和吐槽。
+**一天可以写很多条**，每条都标着生成时间（`15:30`），只覆盖"上次写完之后新增的提问"，不会重复。
+
+存放位置：
+
+```
+D:\DeepSeekHarness\dsh-pet\diary\
+├─ 2026-10-24.md     每天一个文件，里面按时间分小节（## 15:30 · 8 件事）
+├─ index.md          全部日记的汇总（最新在前）
+├─ viewer.html       阅读页（右键菜单「查看日记」打开的就是它）
+├─ fonts\            上首软糖体（和余额气泡同一款字体）
+└─ .state.json       指纹 / 冷却 / token 用量缓存
+```
+
+### 查看
+
+- **桌面端**：右键桌宠 →「查看日记」，用系统默认浏览器打开阅读页；
+- **命令行**：`npm run diary:open`（重建并打开）、`npm run diary:view`（只重建）、
+  `npm run diary:list`（终端里列一行摘要）。
+
+阅读页按时间**从新到旧**竖排，每张卡片显示日期、星期、时间、这段的条数和 token 用量；
+字体是 `assets/fonts/上首软糖体.ttf`，与余额气泡同款（复制到 `diary/fonts/`，改字体只改这一处）。
+不支持自定义字体时会回退到气泡同一串后备字体（Yuanti SC / 幼圆 / PingFang / 微软雅黑）。
+
+数据来源是 Codex 自己的会话记录，**当天所有对话、所有项目**，不分 cwd：
+
+- `~/.codex/sessions/**/rollout-*.jsonl`（**递归全部日期目录**——一个会话从哪天开始，
+  文件就一直待在那天的目录里，比如 10-21 开的会话今天还在用）
+- `~/.codex/archived_sessions/*.jsonl`（已归档的会话）
+
+先用文件的 `mtime` 做廉价预筛（今天动过的文件才可能含今天的消息），再按**每条消息的时间戳**
+判断是否属于当天；解析结果按 `size+mtime` 缓存，运行中每分钟检查一次也不会反复解析几 MB 的 JSONL。
+
+只挑 `role: "user"` 的提问，跳过 `environment_context`、`/compact`、任务通知这类系统注入；
+同一条会话跨午夜时，前一天/后一天各自归位。
+
+### 省 token 的做法
+
+| 措施 | 数值 |
+|---|---|
+| 只取用户提问（丢掉助手回复、工具输出） | 输入通常 500～800 token |
+| 每条截断 | 140 字 |
+| 每天最多 | 40 条（超出取最近的） |
+| 输出上限 | 900 token（`deepseek-flash` 会先写 reasoning，预算太小正文会被截断） |
+| 会话指纹没变 | 直接跳过，不调用模型 |
+| 冷却 | 10 分钟内不重复生成 |
+
+实测：一天 15 条提问 → 输入 513 token，输出 185～582 token。
+
+### 自动执行
+
+`src/watch-codex.js` 里挂了三个时机，**不需要额外计划任务**：
+
+| 时机 | 条件 | 说明 |
+|---|---|---|
+| Codex 关闭 | 新增提问 **≥ 3 条** | 写一条覆盖这段时间的日记，桌宠头顶弹「日记写好了～（15:30）」，然后桌宠继续留着 |
+| 运行中 | 每 60 秒检查，新增 **≥ 12 条** | 一次对话太长时提前写一条，不用等关闭 |
+| 跨过午夜 | — | 把前一天残留的补上（同样按 ≥3 条的门槛） |
+
+没到门槛的提问会**攒着**，等下一次关闭/攒够再一起写，不会丢。两个门槛都能用环境变量调：
+`DSH_DIARY_MIN_TURNS_CLOSE`（默认 3）、`DSH_DIARY_MIN_TURNS_MIDRUN`（默认 12）。
+手动 `node src/diary.js --force` 则无条件写一条。
+
+失败不影响桌宠启停——写入过程最多占 45 秒，异常只记进 `%LOCALAPPDATA%\dsh-pet-codex\watch.log`。
+
+### 手动命令
+
+```sh
+npm run diary            # 写今天的（有冷却/指纹判断）
+npm run diary:preview    # 只打印将要发给模型的清单，不花 token
+npm run diary:list       # 列出已有日记
+npm run diary:open       # 重建阅读页并用默认浏览器打开
+npm run diary:view       # 只重建阅读页（viewer.html + index.md）
+
+node src/diary.js --date 2026-10-23   # 补某一天
+node src/diary.js --force             # 忽略冷却，重写
+npm run diary:rebuild                 # 重建当天：旧文件备份到 diary/archive/，按 60 分钟间隔重新分条
+```
+
+模型和 key 复用 `D:\DeepSeekHarness\dsh-pet\standalone-ai.json`（`baseUrl` / `model` / `apiKey`）。
+想换更便宜的模型或调预算，设环境变量 `DSH_DIARY_MAX_TOKENS`，或直接改 `src/diary.js` 里的 `DEFAULT_MAX_TOKENS`。
+
+隐私：只有**截断后的提问摘要**会发给 DeepSeek，助手回复和工具输出不发送；
+文本里形如 `sk-xxxx` 的密钥和 32 位以上的长串会先被替换成 `***`。日记本身只存在本机。
 
 ## 行为频率
 
@@ -292,22 +403,22 @@ key 的查找顺序：
 
 - `hook.js`：Hook 入口 shim（保持 config.toml 里的路径和信任不变）
 - `src/hook.js`：事件入口（读 stdin 的 JSON、找宿主、必要时拉起、调 API）
-- `src/watch-codex.js`：看门狗，Codex 启动时拉起桌宠、关闭时收掉
+- `src/watch-codex.js`：看门狗，Codex 启动时拉起桌宠，关闭时写日记后自己退出（桌宠留着）
 - `src/standalone-launcher.js`：隐藏启动器（先重建补丁，再拉起独立模式，失败回退原版）
-- `src/build-patches.js`：生成 `lib/standalone-codex.js` + 就地补丁
+- `src/patches/`：生成 `lib/standalone-codex.js` + 就地补丁
 - `src/config.js`：路径 / 端口 / 状态目录常量
 - `config/*.sample.*`：脱敏配置样例（桌宠 / AI / Codex hooks）
 - `install/apply-hooks.js`：写入或移除 `config.toml` 的 hook 段
 - `install/register-task.ps1` / `unregister-task.ps1`：注册 / 移除计划任务
-- `start-watch.vbs`：计划任务的隐藏入口（路径自解析）
+- `scripts/start-watch.vbs`：计划任务的隐藏入口（路径自解析）
 - `%LOCALAPPDATA%\dsh-pet-codex\launch-standalone.vbs`：自动拉起用，每次生成
-- 触发器：计划任务 `dsh-pet-on-codex-launch`（见上节）；`archive/` 是已停用的旧开机项
+- 触发器：计划任务 `dsh-pet-on-codex-launch`（见上节）；`scripts/legacy/` 是已停用的旧开机项
 - 配置在 `~/.codex/config.toml` 的 `[[hooks.*]]` 与 `[hooks.state.*]` 段
 
 ## 自检
 
 ```sh
-"C:/PROGRA~1/nodejs/node.exe" "C:/Users/potato/.codex/dsh-pet/hook.js" --check
+"C:/PROGRA~1/nodejs/node.exe" "D:/WORK/Codex-DeepSeek-pet/hook.js" --check
 ```
 
 输出 `dsh-pet OK (standalone) · 127.0.0.1:3080 · pet=main` 即正常，括号里是宿主类型
@@ -315,6 +426,9 @@ key 的查找顺序：
 
 最近一次 hook 事件记录在 `%LOCALAPPDATA%\dsh-pet-codex\last-event.json`；
 详细日志（设 `DSH_PET_CODEX_DEBUG=1` 后写入）在 `%LOCALAPPDATA%\dsh-pet-codex\debug.log`。
+
+想看代码怎么串起来的（hook → HTTP → 桌宠 → 日记），见
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)；版本变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 端口发现
 
@@ -327,13 +441,13 @@ DSH 的 Web 端口是随机的，脚本先读缓存 `%LOCALAPPDATA%\dsh-pet-code
 隐藏启动（和 hook 用同一份逻辑）：
 
 ```sh
-wscript "C:\Users\potato\AppData\Local\dsh-pet-codex\launch-standalone.vbs"
+wscript "%LOCALAPPDATA%\dsh-pet-codex\launch-standalone.vbs"
 ```
 
 或直接跑启动器：
 
 ```sh
-"C:/PROGRA~1/nodejs/node.exe" "C:/Users/potato/.codex/dsh-pet/src/standalone-launcher.js"
+"C:/PROGRA~1/nodejs/node.exe" "D:/WORK/Codex-DeepSeek-pet/src/standalone-launcher.js"
 ```
 
 关闭：桌宠右键菜单退出，或带 token 请求 `POST http://127.0.0.1:3080/shutdown`。

@@ -17,7 +17,7 @@ const {
   DSH_HOME,
 } = require('./config');
 
-const BUILDER = path.join(__dirname, 'build-patches.js');
+const BUILDER = path.join(__dirname, 'patches', 'index.js');
 
 function start(target) {
   const child = spawn(process.execPath, [target, '--port', String(PORT)], {

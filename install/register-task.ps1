@@ -15,9 +15,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProjectDir = Split-Path $PSScriptRoot -Parent
-$vbs = Join-Path $ProjectDir 'start-watch.vbs'
+$vbs = Join-Path $ProjectDir 'scripts\start-watch.vbs'
 if (-not (Test-Path $vbs)) {
-  throw "start-watch.vbs not found: $vbs"
+  throw "scripts\start-watch.vbs not found: $vbs"
 }
 $node = Join-Path $env:ProgramFiles 'nodejs\node.exe'
 if (-not (Test-Path $node)) {

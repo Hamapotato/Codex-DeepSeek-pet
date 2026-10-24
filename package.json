@@ -1,16 +1,22 @@
 {
   "name": "dsh-pet-codex-bridge",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Codex ↔ dsh-pet 桌面宠物（大肥鱼）联动：hook 事件、启动看门狗、本地补丁",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
-    "build": "node src/build-patches.js",
+    "build": "node src/patches/index.js",
     "check": "node hook.js --check",
     "launch": "node src/standalone-launcher.js",
     "watch": "node src/watch-codex.js",
+    "diary": "node src/diary.js",
+    "diary:list": "node src/diary.js --list",
+    "diary:preview": "node src/diary.js --dry-run",
+    "diary:view": "node src/diary.js --view",
+    "diary:open": "node src/diary.js --open",
+    "diary:rebuild": "node src/diary.js --rebuild",
     "hooks": "node install/apply-hooks.js",
     "task:register": "powershell -NoProfile -ExecutionPolicy Bypass -File install/register-task.ps1",
     "task:unregister": "powershell -NoProfile -ExecutionPolicy Bypass -File install/unregister-task.ps1"

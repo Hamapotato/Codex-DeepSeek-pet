@@ -57,6 +57,13 @@ const LOG = path.join(STATE_DIR, 'watch.log');
 /** Python-free way to reach the interpreter that is already running us. */
 const NODE_EXE = process.execPath;
 
+/** Codex transcript root: <CODEX_HOME>/sessions/YYYY/MM/DD/rollout-*.jsonl */
+const CODEX_HOME = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+const CODEX_SESSIONS = path.join(CODEX_HOME, 'sessions');
+
+/** Pet diary: one Markdown file per day plus a small state cache. */
+const DIARY_DIR = process.env.DSH_PET_DIARY_DIR || path.join(DSH_HOME, 'dsh-pet', 'diary');
+
 module.exports = {
   PROJECT_DIR,
   DSH_HOME,
@@ -76,4 +83,7 @@ module.exports = {
   DEBUG_LOG,
   LOG,
   NODE_EXE,
+  CODEX_HOME,
+  CODEX_SESSIONS,
+  DIARY_DIR,
 };
