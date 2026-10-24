@@ -20,7 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const { execFileSync, spawn } = require('child_process');
-const { isLinked, buildContext, recordTurn } = require('./chat-link');
+const { isLinked, contextFor, recordTurn } = require('./chat-link');
 const {
   ROUTE,
   STATE_DIR,
@@ -384,27 +384,27 @@ async function main() {
   note({ event, sessionId, phase: 'received' });
 
   // ---- 心声线：被绑定的那条对话和桌宠双向同步 ----
-  if (sessionId && isLinked(sessionId)) {
-    if (event === 'UserPromptSubmit') {
-      // 把「人设 + 日记 + 印象 + 共同记忆」注入这一轮，让模型以桌宠身份说话
-      try {
-        const context = buildContext(sessionId);
+  if (event === 'UserPromptSubmit') {
+    // 只有绑定会话能拿到人设/日记/印象/记忆；其它会话 contextFor() 返回 null
+    try {
+      const context = contextFor(sessionId);
+      if (context) {
         process.stdout.write(
           JSON.stringify({
             hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: context },
           }) + '\n',
         );
-      } catch (err) {
-        debug('chat-link context failed:', err.message);
       }
-    } else if (event === 'Stop') {
-      // 一轮结束：把这一问一答写进共享记忆
-      try {
-        const { added } = recordTurn(input.transcript_path);
-        if (added) debug(`chat-link memory +${added}`);
-      } catch (err) {
-        debug('chat-link record failed:', err.message);
-      }
+    } catch (err) {
+      debug('chat-link context failed:', err.message);
+    }
+  } else if (event === 'Stop' && sessionId && isLinked(sessionId)) {
+    // 一轮结束：把这一问一答写进共享记忆（只对绑定会话生效）
+    try {
+      const { added } = recordTurn(input.transcript_path);
+      if (added) debug(`chat-link memory +${added}`);
+    } catch (err) {
+      debug('chat-link record failed:', err.message);
     }
   }
   const action = plan(input);

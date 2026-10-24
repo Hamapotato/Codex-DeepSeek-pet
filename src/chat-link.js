@@ -31,7 +31,12 @@ const MEMORY_FILE = path.join(DSH_PET_HOME, 'memory.json');
 const PET_CONFIG = path.join(DSH_PET_HOME, 'main-config.jsonc');
 const LAST_EVENT = path.join(STATE_DIR, 'last-event.json');
 
-const MAX_MEMORY_IN_CONTEXT = 12;
+// 记忆要以"够用且省 token"为准：注入时只取最近几条，每条再截断一次
+const MAX_MEMORY_IN_CONTEXT = 8;
+const MEMORY_CONTEXT_CHARS = 80;
+// 落盘也压短：单条上限 + 总条数上限
+const MEMORY_STORE_CHARS = 400;
+const MEMORY_MAX_ENTRIES = 120;
 const MAX_DIARY_IN_CONTEXT = 3;
 
 function readJson(file, fallback) {
@@ -76,6 +81,14 @@ function isLinked(sessionId) {
   return !!(link && sessionId && link.sessionId === sessionId);
 }
 
+/**
+ * 只会返回给绑定会话的上下文。
+ * 其它任何 session 一律 null —— 日记 / 印象 / 记忆都不会被注入到别的对话。
+ */
+function contextFor(sessionId) {
+  return isLinked(sessionId) ? buildContext(sessionId) : null;
+}
+
 /** 最近一次收到 hook 事件的会话（用于 `npm run pet:link`）。 */
 function lastSessionId() {
   const ev = readJson(LAST_EVENT, null);
@@ -107,13 +120,15 @@ function readMemory() {
 /** 追加一条消息到桌宠记忆（和 dsh-pet 的 /chat 用同一份文件）。 */
 function appendMemory(role, content, extra = {}) {
   if (!content) return;
+  const short = String(content).replace(/\s+/g, ' ').trim().slice(0, MEMORY_STORE_CHARS);
+  if (!short) return;
   const mem = readJson(MEMORY_FILE, {});
   mem.main = mem.main || {};
   mem.main.main = mem.main.main || {};
   const list = Array.isArray(mem.main.main.messages) ? mem.main.main.messages : [];
-  list.push({ role, content, ts: Date.now(), ...extra });
-  // 只保留最近 200 条，避免无限增长
-  mem.main.main.messages = list.slice(-200);
+  list.push({ role, content: short, ts: Date.now(), ...extra });
+  // 只保留最近 N 条，避免无限增长
+  mem.main.main.messages = list.slice(-MEMORY_MAX_ENTRIES);
   writeJson(MEMORY_FILE, mem);
 }
 
@@ -139,7 +154,9 @@ function buildContext(sessionId) {
     : '（对主人还没有形成结论，别急着下定义）';
 
   const mem = memory.length
-    ? memory.map((m) => `${m.role === 'user' ? '主人' : name}：${String(m.content).slice(0, 120)}`).join('\n')
+    ? memory
+        .map((m) => `${m.role === 'user' ? '主人' : name}：${String(m.content).slice(0, MEMORY_CONTEXT_CHARS)}`)
+        .join('\n')
     : '（这是你们第一次认真聊天）';
 
   return [
@@ -254,6 +271,7 @@ module.exports = {
   readMemory,
   appendMemory,
   buildContext,
+  contextFor,
   recordTurn,
 };
 
@@ -275,6 +293,17 @@ if (require.main === module) {
   } else if (argv.includes('--context')) {
     const id = (readLink() || {}).sessionId || lastSessionId() || 'preview';
     console.log(buildContext(id));
+  } else if (argv.includes('--verify')) {
+    const link = readLink();
+    const last = lastSessionId();
+    if (!link) {
+      console.log('未绑定：任何对话都不会收到人设/日记/印象/记忆');
+      process.exit(0);
+    }
+    console.log(`绑定会话：${link.sessionId}`);
+    console.log(`  绑定会话拿到的上下文长度：${(contextFor(link.sessionId) || '').length} 字`);
+    console.log(`  其它会话拿到的上下文：${contextFor('00000000-0000-0000-0000-000000000000') === null ? '无（null）' : '有！'}`);
+    if (last && last !== link.sessionId) console.log(`  当前对话是 ${last}，不会收到上下文`);
   } else {
     status();
   }
