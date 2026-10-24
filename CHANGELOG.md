@@ -17,6 +17,8 @@ _暂无_
   - 每轮 `Stop` 从 transcript 取最后一问一答，写进桌宠的 `memory.json`（去重，保留 200 条）。
   - 桌宠自己的聊天窗读写同一份 `memory.json` → 两边共享记忆。
   - 其它对话保持单向：只作为日记/印象素材，不受影响。
+  - 心声线里的内容也默认进日记/印象（倾诉、日常都算素材）；
+    `DSH_DIARY_EXCLUDE_CHAT=1` 可以把这条对话排除在外。
 - `npm run pet:link` / `pet:unlink` / `pet:status`；`chat-link.js --link <sessionId>` 可显式指定。
 
 ## [1.3.0] - 2026-10-25

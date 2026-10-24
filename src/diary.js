@@ -210,6 +210,20 @@ function dayStartMs(key) {
   return new Date(y, m - 1, d, 0, 0, 0, 0).getTime();
 }
 
+/**
+ * 「心声线」那条对话默认**也算素材**（倾诉、日常、烦恼都会进日记和印象）。
+ * 如果哪天不想让它进，设 DSH_DIARY_EXCLUDE_CHAT=1。
+ */
+function linkedChatSessionId() {
+  if (process.env.DSH_DIARY_EXCLUDE_CHAT !== '1') return null;
+  try {
+    const link = JSON.parse(fs.readFileSync(path.join(DSH_HOME, 'dsh-pet', 'chat-link.json'), 'utf8'));
+    return link && typeof link.sessionId === 'string' ? link.sessionId : null;
+  } catch {
+    return null;
+  }
+}
+
 /** 递归列出目录下所有 rollout 文件。 */
 function walkJsonl(dir, out) {
   if (!fs.existsSync(dir)) return out;
@@ -239,8 +253,10 @@ function candidateFiles(key) {
   const since = dayStartMs(key) - 2 * 60 * 60 * 1000; // 留 2 小时时差/时钟偏差
   const all = walkJsonl(path.join(CODEX_SESSIONS || path.join(CODEX_HOME, 'sessions')), []);
   walkJsonl(path.join(CODEX_HOME, 'archived_sessions'), all);
+  const chatSession = linkedChatSessionId(); // 默认 null（含进去）；DSH_DIARY_EXCLUDE_CHAT=1 时才有值
   const out = [];
   for (const f of all) {
+    if (chatSession && path.basename(f).includes(chatSession)) continue;
     try {
       if (fs.statSync(f).mtimeMs >= since) out.push(f);
     } catch {}

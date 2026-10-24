@@ -138,6 +138,14 @@ function confidenceOf(t) {
   return 'low';
 }
 
+/** 是否已经有真正的"结论"（只有零散细节不算）。 */
+function hasConclusion(p) {
+  if (!p) return false;
+  const identity = String(p.identity || '').trim();
+  const hasIdentity = identity && identity !== '还不确定';
+  return Boolean(hasIdentity || (p.traits && p.traits.length) || (p.habits && p.habits.length));
+}
+
 // ---------------------------------------------------------------------------
 // 渲染
 // ---------------------------------------------------------------------------
@@ -162,7 +170,8 @@ function renderViewer(profile, progress) {
     ? `${profile.basedOnDiary} 篇日记 / ${profile.basedOnMessages} 条对话`
     : '暂时还没有结论';
 
-  const body = profile
+  const concluded = hasConclusion(profile);
+  const body = concluded
     ? `
     <section class="card">
       <div class="label">你是</div>
@@ -206,7 +215,17 @@ function renderViewer(profile, progress) {
       <div class="value">我还不打算这么早给你下结论。</div>
       <p class="muted">已经看了 <b>${progress.entries}</b> 篇日记、约 <b>${progress.messages}</b> 条对话；
       攒到 ${FIRST_ENTRIES} 篇或约 ${FIRST_MESSAGES} 条，我再试着说说你是个什么样的人。</p>
-    </section>`;
+    </section>
+    ${
+      profile && profile.highlights && profile.highlights.length
+        ? `<section class="card">
+      <div class="label">先记下的特别小事</div>
+      <div class="habits">${profile.highlights
+        .map((h) => `<div><span class="dot gold">✦</span>${esc(h)}</div>`)
+        .join('')}</div>
+    </section>`
+        : ''
+    }`;
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -300,12 +319,23 @@ function writeProfile(profile, progress) {
   );
 }
 
-/** 没有结论时也写一份"还在观察"的页面，让菜单点开有东西看。 */
-function writePlaceholder(entries) {
-  writeProfile(null, totals(entries));
+/**
+ * 还没有结论时也写一份"还在观察"的页面，让菜单点开有东西看。
+ * 如果已经攒了「特别的小事」，照旧显示，不会被清掉。
+ */
+function writePlaceholder(entries, profile = null) {
+  const stats = totals(entries);
+  fs.mkdirSync(DIR, { recursive: true });
+  fs.writeFileSync(VIEWER, renderViewer(profile, stats), 'utf8');
+  if (profile) return;
   try {
     fs.unlinkSync(PROFILE_JSON);
   } catch {}
+  fs.writeFileSync(
+    PROFILE_MD,
+    `# 大肥鱼眼里的你\n\n还在观察中：已看 ${stats.entries} 篇日记 / 约 ${stats.messages} 条对话。\n`,
+    'utf8',
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -343,17 +373,18 @@ async function runImpressions(options = {}) {
 
   const entryGain = stats.entries - (Number(state.lastEntryCount) || 0);
   const messageGain = stats.messages - (Number(state.lastMessageCount) || 0);
+  const concluded = hasConclusion(profile);
 
   const due = force
     ? true
-    : profile
+    : concluded
       ? entryGain >= NEXT_ENTRIES || messageGain >= NEXT_MESSAGES
       : stats.entries >= FIRST_ENTRIES || stats.messages >= FIRST_MESSAGES;
 
   if (!due) {
-    if (!profile) writePlaceholder(entries);
+    if (!concluded) writePlaceholder(entries, profile);
     say(
-      profile
+      concluded
         ? `[印象] 还不够更新：新增 ${entryGain}/${NEXT_ENTRIES} 篇、${messageGain}/${NEXT_MESSAGES} 条`
         : `[印象] 还在观察：已看 ${stats.entries}/${FIRST_ENTRIES} 篇、${stats.messages}/${FIRST_MESSAGES} 条`,
     );
@@ -482,16 +513,16 @@ if (require.main === module) {
   if (flag('--view')) {
     const p = readJson(PROFILE_JSON, null);
     const entries = allEntries();
-    if (p) writeProfile(p, totals(entries));
-    else writePlaceholder(entries);
+    if (hasConclusion(p)) writeProfile(p, totals(entries));
+    else writePlaceholder(entries, p);
     console.log(`已重建 ${VIEWER}`);
     process.exit(0);
   }
   if (flag('--open')) {
     const p = readJson(PROFILE_JSON, null);
     const entries = allEntries();
-    if (p) writeProfile(p, totals(entries));
-    else writePlaceholder(entries);
+    if (hasConclusion(p)) writeProfile(p, totals(entries));
+    else writePlaceholder(entries, p);
     require('child_process').spawn('explorer.exe', [VIEWER], { detached: true, stdio: 'ignore' }).unref();
     console.log(`已打开 ${VIEWER}`);
     process.exit(0);
