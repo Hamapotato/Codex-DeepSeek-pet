@@ -27,20 +27,23 @@ const FONT_NAME = '上首软糖体.ttf';
 const FONT_FAMILY =
   "'ShangshouSoftCandy','Yuanti SC','YouYuan','幼圆','Comic Sans MS','PingFang SC','Microsoft YaHei',sans-serif";
 
-function ensureFont() {
+/**
+ * 把字体读成 data: URL 内联进页面。
+ *
+ * 为什么不用相对路径：viewer.html 是 file:// 打开的，Chromium 对 file:// 页面的
+ * 本地字体加载时灵时不灵，一旦失败就悄悄回退到「幼圆/微软雅黑」，跟余额气泡对不上。
+ * 内联是唯一 100% 保证一致的做法（4 MB 字体 → ~5 MB HTML，本地打开毫无压力）。
+ */
+let cachedFontUrl = null;
+function fontDataUrl() {
+  if (cachedFontUrl !== null) return cachedFontUrl;
   try {
-    const dir = path.join(diaryDir, 'fonts');
-    const dest = path.join(dir, FONT_NAME);
-    if (!fs.existsSync(FONT_SOURCE)) return null;
-    fs.mkdirSync(dir, { recursive: true });
-    const srcSize = fs.statSync(FONT_SOURCE).size;
-    if (!fs.existsSync(dest) || fs.statSync(dest).size !== srcSize) {
-      fs.copyFileSync(FONT_SOURCE, dest);
-    }
-    return `fonts/${encodeURIComponent(FONT_NAME)}`;
+    const buf = fs.readFileSync(FONT_SOURCE);
+    cachedFontUrl = `data:font/ttf;base64,${buf.toString('base64')}`;
   } catch {
-    return null;
+    cachedFontUrl = '';
   }
+  return cachedFontUrl;
 }
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -54,7 +57,7 @@ const escapeHtml = (s) =>
 
 /** 生成 diary/viewer.html：菜单里「查看日记」打开的就是它。 */
 function writeViewer(entries, diaryDir) {
-  const fontHref = ensureFont();
+  const fontHref = fontDataUrl();
   const cards = entries
     .map((e) => {
       const [y, m, d] = e.key.split('-');

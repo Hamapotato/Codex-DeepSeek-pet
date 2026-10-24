@@ -289,7 +289,6 @@ D:\DeepSeekHarness\dsh-pet\diary\
 ├─ 2026-10-24.md     每天一个文件，里面按时间分小节（## 15:30 · 8 件事）
 ├─ index.md          全部日记的汇总（最新在前）
 ├─ viewer.html       阅读页（右键菜单「查看日记」打开的就是它）
-├─ fonts\            上首软糖体（和余额气泡同一款字体）
 └─ .state.json       指纹 / 冷却 / token 用量缓存
 ```
 
@@ -300,8 +299,10 @@ D:\DeepSeekHarness\dsh-pet\diary\
   `npm run diary:list`（终端里列一行摘要）。
 
 阅读页按时间**从新到旧**竖排，每张卡片显示日期、星期、时间、这段的条数和 token 用量；
-字体是 `assets/fonts/上首软糖体.ttf`，与余额气泡同款（复制到 `diary/fonts/`，改字体只改这一处）。
-不支持自定义字体时会回退到气泡同一串后备字体（Yuanti SC / 幼圆 / PingFang / 微软雅黑）。
+字体是 `assets/fonts/上首软糖体.ttf`，与余额气泡同款。构建阅读页时把字体**内联成
+`data:` URL** 写进 `viewer.html`——`file://` 页面对本地字体加载时灵时不灵，内联才能
+保证和气泡一模一样（代价是 viewer.html 约 5 MB，本地打开无感）。
+字体缺失时回退到气泡同一串后备字体（Yuanti SC / 幼圆 / PingFang / 微软雅黑）。
 
 数据来源是 Codex 自己的会话记录，**当天所有对话、所有项目**，不分 cwd：
 
