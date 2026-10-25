@@ -24,6 +24,7 @@ const path = require('path');
 const { DSH_HOME, STATE_DIR } = require('./config');
 const { allEntries } = require('./diary');
 const { PROFILE_JSON } = require('./impressions');
+const { normalizeForStore, displayText, memoryContext } = require('./memory');
 
 const DSH_PET_HOME = path.join(DSH_HOME, 'dsh-pet');
 const LINK_FILE = path.join(DSH_PET_HOME, 'chat-link.json');
@@ -31,11 +32,7 @@ const MEMORY_FILE = path.join(DSH_PET_HOME, 'memory.json');
 const PET_CONFIG = path.join(DSH_PET_HOME, 'main-config.jsonc');
 const LAST_EVENT = path.join(STATE_DIR, 'last-event.json');
 
-// 记忆要以"够用且省 token"为准：注入时只取最近几条，每条再截断一次
-const MAX_MEMORY_IN_CONTEXT = 8;
-const MEMORY_CONTEXT_CHARS = 80;
-// 落盘也压短：单条上限 + 总条数上限
-const MEMORY_STORE_CHARS = 400;
+// 记忆落盘总量上限（单条长度由 memory.js 的 normalizeForStore 控制）
 const MEMORY_MAX_ENTRIES = 120;
 const MAX_DIARY_IN_CONTEXT = 3;
 
@@ -85,8 +82,8 @@ function isLinked(sessionId) {
  * 只会返回给绑定会话的上下文。
  * 其它任何 session 一律 null —— 日记 / 印象 / 记忆都不会被注入到别的对话。
  */
-function contextFor(sessionId) {
-  return isLinked(sessionId) ? buildContext(sessionId) : null;
+function contextFor(sessionId, userText = '') {
+  return isLinked(sessionId) ? buildContext(sessionId, userText) : null;
 }
 
 /** 最近一次收到 hook 事件的会话（用于 `npm run pet:link`）。 */
@@ -120,24 +117,24 @@ function readMemory() {
 /** 追加一条消息到桌宠记忆（和 dsh-pet 的 /chat 用同一份文件）。 */
 function appendMemory(role, content, extra = {}) {
   if (!content) return;
-  const short = String(content).replace(/\s+/g, ' ').trim().slice(0, MEMORY_STORE_CHARS);
-  if (!short) return;
+  const stored = normalizeForStore(content); // 折叠空白 + 超长按句子边界（不再 400 字硬切）
+  if (!stored) return;
   const mem = readJson(MEMORY_FILE, {});
   mem.main = mem.main || {};
   mem.main.main = mem.main.main || {};
   const list = Array.isArray(mem.main.main.messages) ? mem.main.main.messages : [];
-  list.push({ role, content: short, ts: Date.now(), ...extra });
+  list.push({ role, content: stored, ts: Date.now(), ...extra });
   // 只保留最近 N 条，避免无限增长
   mem.main.main.messages = list.slice(-MEMORY_MAX_ENTRIES);
   writeJson(MEMORY_FILE, mem);
 }
 
-/** 注入给 Codex 的上下文：人设 + 日记 + 印象 + 最近记忆。 */
-function buildContext(sessionId) {
+/** 注入给 Codex 的上下文：人设 + 日记 + 印象 + 事实卡 + 检索到的记忆。 */
+function buildContext(sessionId, userText = '') {
   const name = petName();
   const entries = allEntries().slice(0, MAX_DIARY_IN_CONTEXT);
   const profile = readJson(PROFILE_JSON, null);
-  const memory = readMemory().slice(-MAX_MEMORY_IN_CONTEXT);
+  const mem = memoryContext(userText); // 关键词/日期检索 + 最近记忆 + 事实卡（全本地）
 
   const diary = entries.length
     ? entries.map((e) => `- ${e.key} ${e.time}：${e.text}`).join('\n')
@@ -152,12 +149,6 @@ function buildContext(sessionId) {
         .filter(Boolean)
         .join('\n')
     : '（对主人还没有形成结论，别急着下定义）';
-
-  const mem = memory.length
-    ? memory
-        .map((m) => `${m.role === 'user' ? '主人' : name}：${String(m.content).slice(0, MEMORY_CONTEXT_CHARS)}`)
-        .join('\n')
-    : '（这是你们第一次认真聊天）';
 
   return [
     `【心声线】这条对话已绑定为「和${name}聊天」的专用窗口（会话 ${sessionId.slice(0, 8)}）。`,
@@ -197,7 +188,11 @@ function buildContext(sessionId) {
     impression,
     '',
     '## 你们的共同记忆',
-    mem,
+    mem.facts ? `### 你确定的事（事实卡）\n${mem.facts}` : '',
+    mem.retrieved ? `### 和这次话题相关的旧记忆\n${mem.retrieved}` : '',
+    mem.recent ? `### 最近聊过的\n${mem.recent}` : '（这是你们第一次认真聊天）',
+    '',
+    '记不清的细节就直接说「我记不太清了，你再说一遍」，不要编。',
   ].join('\n');
 }
 

@@ -25,6 +25,7 @@ const net = require('net');
 const { execFileSync, spawn } = require('child_process');
 const { runDiary, dayKey, pendingDates } = require('./diary');
 const { runImpressions, captureHighlights } = require('./impressions');
+const { compressLong, extractFacts } = require('./memory');
 const {
   STATE_DIR,
   DSH_HOME,
@@ -266,6 +267,9 @@ async function flushQueued() {
 /** 「印象簿」：日记/对话攒够量才更新，峰时自动跳过。最多占 45 秒。 */
 async function impressions() {
   try {
+    // 记忆维护：长消息缩句 + 事实卡抽取（都在谷时、都失败无感）
+    await Promise.race([compressLong({ quiet: true }), sleep(20_000)]);
+    await Promise.race([extractFacts({ quiet: true }), sleep(20_000)]);
     // 先补记「特别的小事」（便宜：只喂最近两篇日记）
     await Promise.race([captureHighlights({ quiet: true }), sleep(30_000)]);
     const result = await Promise.race([

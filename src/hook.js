@@ -387,7 +387,7 @@ async function main() {
   if (event === 'UserPromptSubmit') {
     // 只有绑定会话能拿到人设/日记/印象/记忆；其它会话 contextFor() 返回 null
     try {
-      const context = contextFor(sessionId);
+      const context = contextFor(sessionId, String(input.prompt || ''));
       if (context) {
         process.stdout.write(
           JSON.stringify({
