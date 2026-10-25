@@ -7,6 +7,16 @@
 
 _暂无_
 
+## [1.5.0] - 2026-10-25
+
+### Changed
+
+- 放宽生成预算（约 3～4 倍）：
+  - 日记正文上限 900 → **3000** token，提示词里的长度也从 60–200 字放宽到 80–300 字；
+  - 印象完整分析 800 → **2400** token，细节捕捉 400 → **1200** token。
+- 环境变量仍可覆盖：`DSH_DIARY_MAX_TOKENS`、`DSH_IMPRESSION_MAX_TOKENS`、
+  `DSH_IMPRESSION_HIGHLIGHT_MAX_TOKENS`。
+
 ## [1.4.4] - 2026-10-25
 
 ### Changed

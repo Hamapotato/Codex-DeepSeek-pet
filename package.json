@@ -1,6 +1,6 @@
 {
   "name": "dsh-pet-codex-bridge",
-  "version": "1.4.4",
+  "version": "1.5.0",
   "private": true,
   "description": "Codex ↔ dsh-pet 桌面宠物（大肥鱼）联动：hook 事件、启动看门狗、本地补丁",
   "engines": {

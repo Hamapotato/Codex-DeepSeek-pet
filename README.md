@@ -326,7 +326,7 @@ D:\DeepSeekHarness\dsh-pet\diary\
 | 只取用户提问（丢掉助手回复、工具输出） | 输入通常 500～800 token |
 | 每条截断 | 140 字 |
 | 每天最多 | 40 条（超出取最近的） |
-| 输出上限 | 900 token（`deepseek-flash` 会先写 reasoning，预算太小正文会被截断） |
+| 输出上限 | **3000 token**（`deepseek-flash` 会先写 reasoning，预算太小正文会被截断） |
 | 会话指纹没变 | 直接跳过，不调用模型 |
 | 冷却 | 10 分钟内不重复生成 |
 
@@ -392,7 +392,7 @@ D:\DeepSeekHarness\dsh-pet\diary\
 - **想对你说**：一句大肥鱼自己的话
 
 素材只用最近的日记摘要 + 上一版印象，所以一次分析输入约 1～2k token，
-细节捕捉只有几百 token；输出上限 800 / 400 token。
+细节捕捉只有几百 token；输出上限 2400（完整分析）/ 1200（细节）token。
 
 ### 存放与查看
 

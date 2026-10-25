@@ -51,7 +51,8 @@ const HIGHLIGHT_ENTRIES = Number(process.env.DSH_IMPRESSION_HIGHLIGHT_ENTRIES ||
 
 const MAX_ENTRIES_IN_PROMPT = 12;
 const MAX_HIGHLIGHTS = 10;
-const MAX_TOKENS = Number(process.env.DSH_IMPRESSION_MAX_TOKENS || 800);
+const MAX_TOKENS = Number(process.env.DSH_IMPRESSION_MAX_TOKENS || 2400);
+const HIGHLIGHT_MAX_TOKENS = Number(process.env.DSH_IMPRESSION_HIGHLIGHT_MAX_TOKENS || 1200);
 
 const PROFILE_PROMPT = [
   '你是「大肥鱼」，一只住在主人桌面上的蓝色胖鱼。下面是主人最近的日记（你自己写的）以及你之前的印象。',
@@ -473,7 +474,7 @@ async function captureHighlights(options = {}) {
   if (!acquireLock()) return { status: 'skipped', reason: 'locked' };
   try {
     const cfg = readAiConfig();
-    const { text, usage } = await askModel(cfg, prompt, 400, HIGHLIGHT_PROMPT);
+    const { text, usage } = await askModel(cfg, prompt, HIGHLIGHT_MAX_TOKENS, HIGHLIGHT_PROMPT);
     const j = parseJsonLoose(text) || {};
     const fresh = arr(j.highlights).slice(0, 2);
     if (fresh.length) {

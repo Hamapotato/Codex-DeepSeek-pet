@@ -53,14 +53,14 @@ const MAX_ITEM_CHARS = 140;
 const MIN_TURNS_CLOSE = Number(process.env.DSH_DIARY_MIN_TURNS_CLOSE || 3);
 const MIN_TURNS_MIDRUN = Number(process.env.DSH_DIARY_MIN_TURNS_MIDRUN || 20);
 // deepseek-flash 会先写 reasoning_content 再写正文，预算太小会让正文被截断甚至为空。
-// 正文 100 字左右 ≈ 150 token，思考过程通常 300～600 token，留 900 足够且仍然很便宜。
-const DEFAULT_MAX_TOKENS = Number(process.env.DSH_DIARY_MAX_TOKENS || 900);
+// 放宽到 3000：思考 + 更长的正文都有余地，实际用量仍然由提示词控制。
+const DEFAULT_MAX_TOKENS = Number(process.env.DSH_DIARY_MAX_TOKENS || 3000);
 
 const SYSTEM_PROMPT = [
   '你是「大肥鱼」——一只住在主人桌面上的蓝色胖鱼，爱玩魔方、爱吃零食，说话懒散又有点小得意。',
   '下面列着主人这一段时间让 Codex 做的事。你可以照着写今天的日记，也可以完全不写这些事。',
   '写什么都行：吐槽、抱怨、愿望、发呆时冒出来的念头、对主人的评价、想吃的零食，想到什么写什么。',
-  '第一人称，自然口语，60～200 个汉字；只输出正文，不要标题、不要列表、不要 Markdown、不要引号。',
+  '第一人称，自然口语，80～300 个汉字；只输出正文，不要标题、不要列表、不要 Markdown、不要引号。',
 ].join('');
 
 // ---------------------------------------------------------------------------
