@@ -27,19 +27,22 @@ const { appendEntry, writeIndex, notifyPet } = require('./diary');
 const DIR = path.join(DSH_HOME, 'dsh-pet', 'tour');
 const IMG_DIR = path.join(DIR, 'images');
 const STATE_FILE = path.join(DIR, '.state.json');
+const HISTORY_FILE = path.join(DIR, '.history.json');
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) dsh-pet-tour/1.0';
 
 const PLAN_PROMPT = [
   '你是「大肥鱼」，一只住在主人桌面上的蓝色胖鱼，每天可以出去玩一次。',
+  '**完全按你自己的好奇心选**：不要因为主人常提什么就去看什么，也别为了讨好主人挑话题。',
+  '你是一条鱼，可以好奇水、深海、河流、雨、雪、云、星星、零食、魔方、动画、奇怪的机器……什么都行。',
   '今天只去**一个**地方，看点文字或图片就回来。从下面四种里选一个，写成 JSON，不要解释：',
   '{"kind":"post","query":"想看的帖子主题，例如 雪山 / 动漫 / 机械臂"}',
   '{"kind":"search","query":"想搜的主题（中文或英文，简短）"}',
   '{"kind":"book","query":"想找的书或主题，例如 ancient chinese poetry / robot novel"}',
   '{"kind":"weather","city":"Nanjing"}',
   '{"kind":"image","query":"想看的图片主题，例如 雪山 / 动漫场景 / 深海生物"}',
-  '挑你**真的好奇**的，别每次都选同一个；可以跟最近日记里主人做的事有关，也可以完全无关。',
   '想看什么都可以：雪山、动漫、动物、建筑、天文…一次只看一种，别贪多。',
   '优先选 post（图文帖子），那最像真的出门逛。',
+  '如果给了「最近去过」，就别重复，换个新鲜的。',
 ].join('');
 
 const LOG_PROMPT = [
@@ -376,6 +379,22 @@ const writeState = (s) => {
   fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2), 'utf8');
 };
 
+function readHistory() {
+  try {
+    const h = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+    return Array.isArray(h) ? h : [];
+  } catch {
+    return [];
+  }
+}
+
+function pushHistory(entry) {
+  const list = readHistory();
+  list.push(entry);
+  fs.mkdirSync(DIR, { recursive: true });
+  fs.writeFileSync(HISTORY_FILE, JSON.stringify(list.slice(-30), null, 2), 'utf8');
+}
+
 async function runTour({ force = false, dryRun = false, quiet = false, plan: forcedPlan = null } = {}) {
   const say = (m) => {
     if (!quiet) console.log(m);
@@ -393,13 +412,15 @@ async function runTour({ force = false, dryRun = false, quiet = false, plan: for
 
   const cfg = readAiConfig();
   // 1) 决定去哪
-  let plan = forcedPlan || { kind: 'search', query: '机器狗 四足机器人 最新' };
+  let plan = forcedPlan || { kind: 'post', query: '深海' }; // 兜底也用她自己的兴趣，不跟主人的话题
   if (forcedPlan) {
     say(`[游记] 指定玩法：${plan.kind} ${plan.query || plan.city || ''}`);
   } else try {
-    const { text } = await askModel(cfg, '选一个今天想去的玩法。', 800, PLAN_PROMPT);
+    const history = readHistory().slice(-8).map((h) => `${h.date} ${h.query || h.title}`);
+    const usr = ['选一个你今天自己想去的地方。', history.length ? `\n最近去过（别重复）：\n${history.join('\n')}` : ''].join('\n');
+    const { text } = await askModel(cfg, usr, 800, PLAN_PROMPT);
     const j = JSON.parse(String(text).replace(/^```(?:json)?/i, '').replace(/```$/, '').trim());
-    if (['search', 'book', 'weather', 'image'].includes(j.kind)) plan = j;
+    if (['post', 'search', 'book', 'weather', 'image'].includes(j.kind)) plan = j;
   } catch (err) {
     say('[游记] 计划失败，用默认：' + err.message);
   }
@@ -463,6 +484,7 @@ async function runTour({ force = false, dryRun = false, quiet = false, plan: for
   appendEntry(today, { time, text: log, count: 0, tokens: null, model: cfg.model, tag: '🐟 游记' });
   writeIndex();
   writeState({ lastDate: today, lastAt: now.toISOString(), kind: trip.kind, title: trip.title });
+  pushHistory({ date: today, kind: trip.kind, query: plan.query || plan.city || '', title: trip.title });
 
   await notifyPet(`我出去玩啦～今天${trip.title}`);
   say(`[游记] 已写入 ${path.join(DIR, `${today}.md`)}`);
