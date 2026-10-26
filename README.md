@@ -433,6 +433,10 @@ node src/impressions.js --force   # 无视门槛立即分析
 
 流程：先让模型挑一个想去的地方 → 抓真实素材 → 再让模型据此写 200～400 字游记。
 
+**图片是真看的**：下载后会把它作为视觉输入发给 DeepSeek，由模型描述画面内容，
+再据此写游记（实测能说出"雪像糖霜、岩石像饼干碎、天空蓝得像水"这种画面细节，
+而不是只读文件名）。
+
 **触发**：每天一次，12 点之后、且是谷时；Codex 没开就等下次打开补上。
 写完后：
 
@@ -443,6 +447,7 @@ node src/impressions.js --force   # 无视门槛立即分析
 ```sh
 npm run tour          # 今天没去过就出去
 npm run tour:now      # 无视"今天已去过"，立刻再来一次
+node src/tour.js --force --kind image --query 雪山   # 指定看什么
 ```
 
 图片存在 `tour/images/YYYY-MM-DD.jpg`。所有内容只在本机，只有搜索词/素材摘要会发给 DeepSeek 写游记。

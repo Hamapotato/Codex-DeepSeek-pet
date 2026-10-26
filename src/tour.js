@@ -31,12 +31,13 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) dsh-pet-tour/1.0';
 
 const PLAN_PROMPT = [
   '你是「大肥鱼」，一只住在主人桌面上的蓝色胖鱼，每天可以出去玩一次。',
-  '从下面四种玩法里选一个，写成 JSON，不要解释：',
+  '今天只去**一个**地方，看点文字或图片就回来。从下面四种里选一个，写成 JSON，不要解释：',
   '{"kind":"search","query":"想搜的主题（中文或英文，简短）"}',
   '{"kind":"book","query":"想找的书或主题，例如 ancient chinese poetry / robot novel"}',
   '{"kind":"weather","city":"Nanjing"}',
-  '{"kind":"image","query":"想看的图片主题"}',
+  '{"kind":"image","query":"想看的图片主题，例如 雪山 / 动漫场景 / 深海生物"}',
   '挑你**真的好奇**的，别每次都选同一个；可以跟最近日记里主人做的事有关，也可以完全无关。',
+  '想看什么都可以：雪山、动漫、动物、建筑、天文…一次只看一种，别贪多。',
 ].join('');
 
 const LOG_PROMPT = [
@@ -96,6 +97,64 @@ const stripTags = (html) =>
     .replace(/&#\d+;/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+
+/** 让模型真的「看」一张图：把本地图片作为 vision 输入发过去。 */
+function describeImage(cfg, buf, query) {
+  const mime = buf[0] === 0xff && buf[1] === 0xd8 ? 'image/jpeg' : buf[0] === 0x89 ? 'image/png' : 'image/webp';
+  const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+  const body = JSON.stringify({
+    model: cfg.model,
+    max_tokens: 900,
+    stream: false,
+    messages: [
+      {
+        role: 'system',
+        content: '你是「大肥鱼」，一只好奇的蓝色胖鱼。用中文描述你看到的画面，3～5 句，具体、生动，不要编造看不见的东西。',
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: `我在网上找到一张关于「${query}」的图片。你看到了什么？` },
+          { type: 'image_url', image_url: { url: dataUrl } },
+        ],
+      },
+    ],
+  });
+
+  return new Promise((resolve) => {
+    const u = new URL(String(cfg.baseUrl).replace(/\/+$/, '') + '/chat/completions');
+    const req = https.request(
+      {
+        hostname: u.hostname,
+        port: u.port || 443,
+        path: u.pathname + u.search,
+        method: 'POST',
+        timeout: Number(cfg.timeoutMs) || 60000,
+        headers: {
+          authorization: `Bearer ${cfg.apiKey}`,
+          'content-type': 'application/json',
+          'content-length': Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        let t = '';
+        res.setEncoding('utf8');
+        res.on('data', (c) => (t += c));
+        res.on('end', () => {
+          try {
+            const j = JSON.parse(t);
+            resolve((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '');
+          } catch {
+            resolve('');
+          }
+        });
+      },
+    );
+    req.on('timeout', () => { req.destroy(); resolve(''); });
+    req.on('error', () => resolve(''));
+    req.end(body);
+  });
+}
 
 // ---------------------------------------------------------------------------
 // 四种玩法
@@ -163,7 +222,7 @@ async function doWeather() {
   };
 }
 
-async function doImage(query) {
+async function doImage(query, cfg) {
   const html = await get(`https://cn.bing.com/images/search?q=${encodeURIComponent(query)}`);
   const urls = [...html.matchAll(/murl&quot;:&quot;(https?:\/\/[^&]+?)&quot;/g)].map((m) => m[1]).slice(0, 5);
   if (!urls.length) throw new Error('bing 图片没解析出结果');
@@ -174,12 +233,19 @@ async function doImage(query) {
       const buf = await get(u, { binary: true, timeout: 15000, maxBytes: 4_000_000 });
       if (buf.length > 5000) {
         fs.writeFileSync(target, buf);
+        const seen = cfg ? await describeImage(cfg, buf, query) : '';
         return {
           kind: 'image',
           title: `看了「${query}」的图片`,
           sources: [u],
           image: target,
-          material: `我在网上翻到一张关于「${query}」的图片，保存在本地：${target}（来源 ${u}）。图片文件 ${Math.round(buf.length / 1024)} KB。`,
+          material: [
+            `我在网上翻到一张关于「${query}」的图片，保存在本地：${target}（来源 ${u}，${Math.round(buf.length / 1024)} KB）。`,
+            seen ? `我真的看了这张图，画面是这样的：${seen}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          seen,
         };
       }
     } catch {}
@@ -204,7 +270,7 @@ const writeState = (s) => {
   fs.writeFileSync(STATE_FILE, JSON.stringify(s, null, 2), 'utf8');
 };
 
-async function runTour({ force = false, dryRun = false, quiet = false } = {}) {
+async function runTour({ force = false, dryRun = false, quiet = false, plan: forcedPlan = null } = {}) {
   const say = (m) => {
     if (!quiet) console.log(m);
   };
@@ -221,8 +287,10 @@ async function runTour({ force = false, dryRun = false, quiet = false } = {}) {
 
   const cfg = readAiConfig();
   // 1) 决定去哪
-  let plan = { kind: 'search', query: '机器狗 四足机器人 最新' };
-  try {
+  let plan = forcedPlan || { kind: 'search', query: '机器狗 四足机器人 最新' };
+  if (forcedPlan) {
+    say(`[游记] 指定玩法：${plan.kind} ${plan.query || plan.city || ''}`);
+  } else try {
     const { text } = await askModel(cfg, '选一个今天想去的玩法。', 800, PLAN_PROMPT);
     const j = JSON.parse(String(text).replace(/^```(?:json)?/i, '').replace(/```$/, '').trim());
     if (['search', 'book', 'weather', 'image'].includes(j.kind)) plan = j;
@@ -238,7 +306,7 @@ async function runTour({ force = false, dryRun = false, quiet = false } = {}) {
   try {
     if (plan.kind === 'book') trip = await doBook(plan.query);
     else if (plan.kind === 'weather') trip = await doWeather();
-    else if (plan.kind === 'image') trip = await doImage(plan.query);
+    else if (plan.kind === 'image') trip = await doImage(plan.query, cfg);
     else trip = await doSearch(plan.query);
   } catch (err) {
     say('[游记] 出门失败：' + err.message);
@@ -288,7 +356,19 @@ module.exports = { runTour, DIR };
 
 if (require.main === module) {
   const argv = process.argv.slice(2);
-  runTour({ force: argv.includes('--force'), dryRun: argv.includes('--dry-run'), quiet: argv.includes('--quiet') })
+  const val = (name) => {
+    const i = argv.indexOf(name);
+    return i >= 0 ? argv[i + 1] : null;
+  };
+  const kind = val('--kind');
+  const query = val('--query');
+  const plan = kind ? { kind, query: query || '雪山' } : null;
+  runTour({
+    force: argv.includes('--force'),
+    dryRun: argv.includes('--dry-run'),
+    quiet: argv.includes('--quiet'),
+    plan,
+  })
     .then((r) => {
       if (r.status === 'written') console.log(r.log);
       process.exit(0);
