@@ -32,30 +32,38 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) dsh-pet-tour/1.0';
 const PLAN_PROMPT = [
   '你是「大肥鱼」，一只住在主人桌面上的蓝色胖鱼，每天可以出去玩一次。',
   '今天只去**一个**地方，看点文字或图片就回来。从下面四种里选一个，写成 JSON，不要解释：',
+  '{"kind":"post","query":"想看的帖子主题，例如 雪山 / 动漫 / 机械臂"}',
   '{"kind":"search","query":"想搜的主题（中文或英文，简短）"}',
   '{"kind":"book","query":"想找的书或主题，例如 ancient chinese poetry / robot novel"}',
   '{"kind":"weather","city":"Nanjing"}',
   '{"kind":"image","query":"想看的图片主题，例如 雪山 / 动漫场景 / 深海生物"}',
   '挑你**真的好奇**的，别每次都选同一个；可以跟最近日记里主人做的事有关，也可以完全无关。',
   '想看什么都可以：雪山、动漫、动物、建筑、天文…一次只看一种，别贪多。',
+  '优先选 post（图文帖子），那最像真的出门逛。',
 ].join('');
 
 const LOG_PROMPT = [
   '你是「大肥鱼」。下面是你今天出门看到/读到的**真实素材**。',
   '写一段 200～400 字的游记：第一人称，口语、可爱、有点懒散，写你看到了什么、想到了什么，',
   '可以吐槽、可以惊叹、可以联想到主人。不要编造素材里没有的事实；不要写标题或 Markdown。',
+  '如果素材里有「配图我看了」的描述，务必写一两句你看到的画面，别只复述文字。',
 ].join('');
 
 // ---------------------------------------------------------------------------
 // HTTP
 // ---------------------------------------------------------------------------
 
-function get(url, { binary = false, timeout = 12000, maxBytes = 2_000_000 } = {}) {
+function get(url, { binary = false, timeout = 12000, maxBytes = 2_000_000, headers = {} } = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const mod = u.protocol === 'http:' ? http : https;
     const req = mod.get(
-      { hostname: u.hostname, path: u.pathname + u.search, timeout, headers: { 'user-agent': UA, 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8' } },
+      {
+        hostname: u.hostname,
+        path: u.pathname + u.search,
+        timeout,
+        headers: { 'user-agent': UA, 'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8', ...headers },
+      },
       (res) => {
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           res.resume();
@@ -99,9 +107,18 @@ const stripTags = (html) =>
     .trim();
 
 /** 让模型真的「看」一张图：把本地图片作为 vision 输入发过去。 */
-function describeImage(cfg, buf, query) {
-  const mime = buf[0] === 0xff && buf[1] === 0xd8 ? 'image/jpeg' : buf[0] === 0x89 ? 'image/png' : 'image/webp';
-  const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+function mimeOf(buf) {
+  if (buf[0] === 0xff && buf[1] === 0xd8) return 'image/jpeg';
+  if (buf[0] === 0x89) return 'image/png';
+  if (buf.slice(0, 4).toString() === 'RIFF') return 'image/webp';
+  return 'image/jpeg';
+}
+
+function describeImages(cfg, images, query) {
+  const parts = [{ type: 'text', text: `我找到一篇关于「${query}」的帖子，里面有 ${images.length} 张图。你看到了什么？各用两三句说，具体一点。` }];
+  for (const img of images) {
+    parts.push({ type: 'image_url', image_url: { url: `data:${mimeOf(img)};base64,${img.toString('base64')}` } });
+  }
   const body = JSON.stringify({
     model: cfg.model,
     max_tokens: 900,
@@ -111,13 +128,7 @@ function describeImage(cfg, buf, query) {
         role: 'system',
         content: '你是「大肥鱼」，一只好奇的蓝色胖鱼。用中文描述你看到的画面，3～5 句，具体、生动，不要编造看不见的东西。',
       },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: `我在网上找到一张关于「${query}」的图片。你看到了什么？` },
-          { type: 'image_url', image_url: { url: dataUrl } },
-        ],
-      },
+      { role: 'user', content: parts },
     ],
   });
 
@@ -189,6 +200,101 @@ async function doSearch(query) {
   };
 }
 
+// ---- B 站专栏（图文帖子）--------------------------------------------------
+
+let biliCookie = '';
+
+async function biliCookieHeader() {
+  if (biliCookie) return biliCookie;
+  try {
+    const r = await new Promise((resolve) => {
+      const req = https.get('https://www.bilibili.com/', { timeout: 10000, headers: { 'user-agent': UA } }, (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.headers['set-cookie'] || []));
+      });
+      req.on('timeout', () => { req.destroy(); resolve([]); });
+      req.on('error', () => resolve([]));
+    });
+    biliCookie = r.map((c) => c.split(';')[0]).join('; ');
+  } catch {}
+  return biliCookie;
+}
+
+async function biliGet(url, { binary = false } = {}) {
+  const cookie = await biliCookieHeader();
+  return get(url, { binary, timeout: 15000, headers: { referer: 'https://www.bilibili.com/', origin: 'https://www.bilibili.com', cookie } });
+}
+
+/** 读一篇 B 站专栏：标题 + 正文 + 配图（图会真的看）。 */
+async function doPost(query, cfg) {
+  const searchRaw = await biliGet(
+    `https://api.bilibili.com/x/web-interface/search/type?search_type=article&keyword=${encodeURIComponent(query)}`,
+  );
+  const sj = JSON.parse(searchRaw);
+  const list = (sj.data && sj.data.result) || [];
+  if (!list.length) throw new Error('专栏没搜到结果');
+
+  // 搜索结果里有些是空壳/无权限，挑一篇正文够长的（最多试 6 篇）
+  const order = list.slice(0, 6).map((_, i) => i);
+  order.sort(() => Math.random() - 0.5);
+  let d = null;
+  let html = '';
+  let pick = null;
+  for (const i of order) {
+    const cand = list[i];
+    try {
+      const viewRaw = await biliGet(`https://api.bilibili.com/x/article/view?id=${cand.id}`);
+      const vj = JSON.parse(viewRaw);
+      const content = String((vj.data && vj.data.content) || '');
+      if (stripTags(content).length < 300) continue;
+      d = vj.data;
+      html = content;
+      pick = cand;
+      break;
+    } catch {}
+  }
+  if (!d) throw new Error('专栏都没有可用正文');
+
+  const text = stripTags(html).slice(0, 1600);
+  const imgUrls = [...html.matchAll(/<img[^>]+src="([^"]+)"/g)]
+    .map((m) => (m[1].startsWith('//') ? 'https:' + m[1] : m[1]))
+    .slice(0, 2);
+  if (!imgUrls.length && Array.isArray(d.image_urls) && d.image_urls.length) {
+    imgUrls.push(...d.image_urls.slice(0, 2).map((u) => (u.startsWith('//') ? 'https:' + u : u)));
+  }
+
+  fs.mkdirSync(IMG_DIR, { recursive: true });
+  const saved = [];
+  const buffers = [];
+  for (let i = 0; i < imgUrls.length; i++) {
+    try {
+      const buf = await get(imgUrls[i], { binary: true, timeout: 15000, maxBytes: 5_000_000 });
+      if (buf.length > 5000) {
+        const target = path.join(IMG_DIR, `${dayKey()}-${i + 1}.jpg`);
+        fs.writeFileSync(target, buf);
+        saved.push(target);
+        buffers.push(buf);
+      }
+    } catch {}
+  }
+  const seen = cfg && buffers.length ? await describeImages(cfg, buffers, query) : '';
+
+  return {
+    kind: 'post',
+    title: `读了一篇专栏《${stripTags(d.title || pick.title || query).slice(0, 40)}》`,
+    sources: [`https://www.bilibili.com/read/cv${pick.id}`],
+    images: saved,
+    seen,
+    material: [
+      `标题：${d.title || pick.title}`,
+      `正文（节选）：${text}`,
+      seen ? `\n配图我看了：${seen}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n'),
+  };
+}
+
 async function doBook(query) {
   const html = await get(`https://www.gutenberg.org/ebooks/search/?query=${encodeURIComponent(query || 'classic novel')}`);
   const ids = [...html.matchAll(/href="\/ebooks\/(\d+)"/g)].map((m) => m[1]);
@@ -233,7 +339,7 @@ async function doImage(query, cfg) {
       const buf = await get(u, { binary: true, timeout: 15000, maxBytes: 4_000_000 });
       if (buf.length > 5000) {
         fs.writeFileSync(target, buf);
-        const seen = cfg ? await describeImage(cfg, buf, query) : '';
+        const seen = cfg ? await describeImages(cfg, [buf], query) : '';
         return {
           kind: 'image',
           title: `看了「${query}」的图片`,
@@ -304,7 +410,16 @@ async function runTour({ force = false, dryRun = false, quiet = false, plan: for
   // 2) 真的出去
   let trip;
   try {
-    if (plan.kind === 'book') trip = await doBook(plan.query);
+    if (plan.kind === 'post') {
+      // 专栏拿不到正文就退回普通搜索，别硬写一篇空游记
+      try {
+        trip = await doPost(plan.query, cfg);
+      } catch (err) {
+        say(`[游记] 专栏不可用（${err.message}），改去网页搜索`);
+        trip = await doSearch(plan.query);
+      }
+    }
+    else if (plan.kind === 'book') trip = await doBook(plan.query);
     else if (plan.kind === 'weather') trip = await doWeather();
     else if (plan.kind === 'image') trip = await doImage(plan.query, cfg);
     else trip = await doSearch(plan.query);
@@ -337,6 +452,8 @@ async function runTour({ force = false, dryRun = false, quiet = false, plan: for
     '',
     ...trip.sources.map((s) => `- ${s}`),
     trip.image ? `\n图片：${trip.image}` : '',
+    trip.images && trip.images.length ? `\n配图：${trip.images.join('\n')}` : '',
+    trip.seen ? `\n## 配图里看到\n\n${trip.seen}` : '',
     '',
   ].join('\n');
   fs.writeFileSync(path.join(DIR, `${today}.md`), md, 'utf8');
