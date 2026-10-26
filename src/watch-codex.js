@@ -27,6 +27,7 @@ const { runDiary, dayKey, pendingDates } = require('./diary');
 const { runImpressions, captureHighlights } = require('./impressions');
 const { compressLong, extractFacts } = require('./memory');
 const { runTour } = require('./tour');
+const { findAnyHost } = require('./hosts');
 const {
   STATE_DIR,
   DSH_HOME,
@@ -119,10 +120,10 @@ function readRuntime() {
 }
 
 async function petAlive() {
-  const runtime = readRuntime();
-  if (!runtime) return false;
-  return health(runtime.port);
+  // 独立模式 或 DSH 内置插件，任意一个活着就算"已有桌宠"
+  return Boolean(await findAnyHost());
 }
+
 
 /** Shared with hook.js: at most one launch per minute across all callers. */
 function claimLaunch() {

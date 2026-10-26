@@ -672,6 +672,26 @@ npm run diary:rebuild                 # 重建当天：旧文件备份到 diary/
 
 ## 自检
 
+### 只开一只桌宠
+
+Codex 和 DeepSeek Harness 同时开着时，容易各起一只。现在的规则：
+
+- 看门狗启动前先找"任意宿主"（`src/hosts.js`）：先看 standalone，再看 DSH；
+- **只有屏幕上真的有可见的桌宠窗口**（标题含「桌宠」）才算"已有宠物"，这时不再拉起 standalone；
+- DSH 只是 `dsh web`（有进程、有 Electron Helper，但没有桌面小窗）时不算，
+  该拉起还是拉起——否则你会一只都看不到。
+
+验证：
+
+```sh
+node -e "require('./src/hosts').findAnyHost().then(h=>console.log(h&&h.mode, h&&h.port))"
+```
+
+返回 `null` 表示没有可见宠物、需要拉起；返回 `dsh` / `standalone` 表示已有一只。
+
+> 已知边界：若 DSH 是在 standalone 已经起来**之后**才创建桌面小窗，仍可能短暂出现两只；
+> 关掉其中一只即可。启动顺序反过来的情况已经覆盖。
+
 ```sh
 "C:/PROGRA~1/nodejs/node.exe" "D:/WORK/Codex-DeepSeek-pet/hook.js" --check
 ```
