@@ -71,6 +71,7 @@ function writeViewer(entries, diaryDir) {
           <time datetime="${e.key}"><span class="day">${Number(d)}</span><span class="ym">${y}.${m}</span></time>
           <span class="chip">${weekday}</span>
           <span class="chip time">${e.time}</span>
+          ${e.tag ? `<span class="chip tag">${escapeHtml(e.tag)}</span>` : ''}
         </div>
         <p class="text">${escapeHtml(e.text)}</p>
         ${meta.length ? `<div class="meta">${escapeHtml(meta.join(' · '))}</div>` : ''}
@@ -139,6 +140,7 @@ function writeViewer(entries, diaryDir) {
     border-radius:999px;padding:3px 11px;
   }
   .chip.time{color:#2f7a4a;background:rgba(46,158,79,.12);font-variant-numeric:tabular-nums}
+  .chip.tag{color:#8a6a12;background:rgba(201,162,39,.18);font-weight:700}
   .text{margin:0;font-size:17px;line-height:1.95;letter-spacing:.2px;white-space:pre-wrap}
   .meta{margin-top:12px;font-size:15px;color:#9d9287}
   .empty{

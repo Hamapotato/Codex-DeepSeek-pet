@@ -18,6 +18,7 @@ Codex 的 lifecycle hooks 在每一轮对话中调用 `hook.js`，通过 dsh-pet
 - **日记阅读页**：右键菜单「查看日记」，按时间倒序的卡片流，字体与余额气泡一致。
 - **印象簿**：攒够很多篇日记后才慢慢总结"你是个什么样的人"，平时只偶尔记下特别的小事；
   右键菜单「我的印象」看结果，同样只存在本机。
+- **小鱼游记**：每天可以自己出去一次——真的上网搜、读书、看图片，回来写一篇带「🐟 游记」标签的日记。
 - **按需启动**：开机不自启；Codex 启动时才拉起看门狗和桌宠，Codex 关闭后桌宠留着你手动关。
 - **自愈补丁**：dsh-pet 升级后，启动器会重新打上余额 / 菜单 / 打开的本地文件等补丁。
 
@@ -35,6 +36,8 @@ D:/WORK/Codex-DeepSeek-pet/
 │  ├─ diary.js                 日记：读会话 / 裁素材 / 调模型 / 落盘 / 状态机
 │  ├─ diary-view.js            日记阅读页渲染（viewer.html）
 │  ├─ impressions.js           印象簿：从日记里慢慢总结"你是什么样的人"
+│  ├─ tour.js                  小鱼游记：每天一次真实外网探索
+│  ├─ memory.js                记忆层：事实卡 / 检索 / 缩句
 │  └─ patches/                 对已安装 dsh-pet 的就地补丁
 │     ├─ index.js              补丁总入口（npm run build）
 │     ├─ shared.js             路径、标记、syntaxOk、patchHelper
@@ -416,6 +419,36 @@ node src/impressions.js --force   # 无视门槛立即分析
 
 门槛都能用环境变量调：`DSH_IMPRESSION_FIRST_ENTRIES`(8)、`DSH_IMPRESSION_FIRST_MESSAGES`(150)、
 `DSH_IMPRESSION_MIN_ENTRIES`(4)、`DSH_IMPRESSION_MIN_MESSAGES`(80)、`DSH_IMPRESSION_HIGHLIGHT_ENTRIES`(2)。
+
+## 小鱼游记
+
+大肥鱼每天可以**自己出去玩一次**，而且是真出去（发真实 HTTP 请求，不是编）：
+
+| 玩法 | 做什么 | 用什么 |
+|---|---|---|
+| `search` | 搜一个自己好奇的话题，点开第一条网页读正文 | Bing |
+| `book` | 随机找一本书，读简介/原文 | Project Gutenberg |
+| `weather` | 看南京此刻的天气 | Open-Meteo |
+| `image` | 搜图片、真的下载一张存本地 | Bing 图片 |
+
+流程：先让模型挑一个想去的地方 → 抓真实素材 → 再让模型据此写 200～400 字游记。
+
+**触发**：每天一次，12 点之后、且是谷时；Codex 没开就等下次打开补上。
+写完后：
+
+- 单独存一份 `D:\DeepSeekHarness\dsh-pet\tour\YYYY-MM-DD.md`（含素材来源、图片路径）
+- 在当天日记末尾追加一节，标题带「🐟 游记」标签，阅读页里显示成金色徽章
+- 桌宠弹一句「我出去玩啦～今天…」
+
+```sh
+npm run tour          # 今天没去过就出去
+npm run tour:now      # 无视"今天已去过"，立刻再来一次
+```
+
+图片存在 `tour/images/YYYY-MM-DD.jpg`。所有内容只在本机，只有搜索词/素材摘要会发给 DeepSeek 写游记。
+
+> 说明：这台机器直连能到 Gutenberg / Bing / Open-Meteo / 豆瓣，维基百科与 DuckDuckGo 被墙，
+> 所以首选 Bing。哪天挂了会自动报错并跳过当天，不会编造。
 
 ## 心声线（和桌宠聊天的那条对话）
 

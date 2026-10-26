@@ -26,6 +26,7 @@ const { execFileSync, spawn } = require('child_process');
 const { runDiary, dayKey, pendingDates } = require('./diary');
 const { runImpressions, captureHighlights } = require('./impressions');
 const { compressLong, extractFacts } = require('./memory');
+const { runTour } = require('./tour');
 const {
   STATE_DIR,
   DSH_HOME,
@@ -189,6 +190,7 @@ async function main() {
   // 上次峰时攒下的素材：这次启动如果已经是谷时，先补写。
   await flushQueued();
   await impressions();
+  await tour();
   let wasRunning = false;
   // 跨天：Codex 连续开着时，午夜过后把"昨天"的日记补上。
   let currentDay = dayKey();
@@ -212,6 +214,7 @@ async function main() {
         await flushQueued();
         await diary(today, 'midrun');
         await impressions();
+        await tour();
       }
     } else if (running === false && wasRunning) {
       // Codex closed -> write today's diary, then leave the pet alone: it stays
@@ -283,6 +286,21 @@ async function impressions() {
     }
   } catch (err) {
     log('impressions failed: ' + err.message);
+  }
+}
+
+/** 小鱼游记：每天一次，12 点之后、谷时才出门。最多占 90 秒。 */
+async function tour() {
+  try {
+    if (new Date().getHours() < 12) return;
+    const result = await Promise.race([
+      runTour({ quiet: true }),
+      sleep(90_000).then(() => ({ status: 'timeout' })),
+    ]);
+    if (result.status === 'written') log(`tour: ${result.trip.title}`);
+    else if (result.status === 'error') log(`tour failed: ${result.error}`);
+  } catch (err) {
+    log('tour failed: ' + err.message);
   }
 }
 

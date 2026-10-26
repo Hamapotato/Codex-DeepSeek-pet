@@ -455,8 +455,8 @@ function diaryPath(key) {
   return path.join(DIARY_DIR, `${key}.md`);
 }
 
-/** 一天的日记可能有多个时间点：`## 15:30 · 8 件事` */
-const SECTION_RE = /^##\s+(\d{1,2}:\d{2})\s*(?:·\s*(\d+)\s*件事)?/;
+/** 一天的日记可能有多个时间点：`## 15:30 · 8 件事` / `## 21:00 · 游记` */
+const SECTION_RE = /^##\s+(\d{1,2}:\d{2})(?:\s*·\s*(.*))?$/;
 
 function readDayEntries(key) {
   const file = diaryPath(key);
@@ -474,7 +474,15 @@ function readDayEntries(key) {
     const m = SECTION_RE.exec(line);
     if (m) {
       if (cur) out.push(cur);
-      cur = { time: m[1].padStart(5, '0'), count: m[2] ? Number(m[2]) : 0, text: '', tokens: null };
+      const parts = String(m[2] || '').split('·').map((s) => s.trim()).filter(Boolean);
+      const countPart = parts.find((p) => /^\d+\s*件事$/.test(p));
+      cur = {
+        time: m[1].padStart(5, '0'),
+        tag: parts.find((p) => !/^\d+\s*件事$/.test(p)) || null,
+        count: countPart ? Number(countPart.replace(/[^\d]/g, '')) : 0,
+        text: '',
+        tokens: null,
+      };
       continue;
     }
     if (!cur) continue;
@@ -543,7 +551,10 @@ function appendEntry(key, entry) {
   ]
     .filter(Boolean)
     .join(' · ');
-  const block = [`## ${entry.time} · ${entry.count} 件事`, '', entry.text, '', `<!-- ${meta} -->`, ''].join('\n');
+  const title = [`## ${entry.time}`, entry.tag ? `· ${entry.tag}` : '', entry.count ? `· ${entry.count} 件事` : '']
+    .filter(Boolean)
+    .join(' ');
+  const block = [title, '', entry.text, '', `<!-- ${meta} -->`, ''].join('\n');
   const existing = fs.readFileSync(file, 'utf8');
   const prefix = existing.trim() && !existing.endsWith('\n\n') ? '\n' : '';
   fs.appendFileSync(file, prefix + block, 'utf8');
@@ -857,7 +868,8 @@ function listDiaries() {
   }
   for (const e of entries) {
     const tok = e.tokens ? ` · ${e.tokens.in}/${e.tokens.out} tok` : '';
-    console.log(`${e.key} ${e.time}  ${e.text.slice(0, 56)}…  · ${e.count} 件${tok}`);
+    const label = e.tag || `${e.count} 件`;
+    console.log(`${e.key} ${e.time}  ${e.text.slice(0, 56)}…  · ${label}${tok}`);
   }
 }
 
@@ -913,4 +925,7 @@ module.exports = {
   readState,
   readAiConfig,
   askModel,
+  appendEntry,
+  writeIndex,
+  notifyPet,
 };
