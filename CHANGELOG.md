@@ -7,6 +7,16 @@
 
 _暂无_
 
+## [1.6.5] - 2026-10-28
+
+### Fixed
+
+- **余额查询 401**：CC Switch 把 `config.toml` 的 `experimental_bearer_token`
+  改写成 `PROXY_…_MANAGED` 占位符后，余额补丁读到它并拿去请求 DeepSeek。
+  现在 key 的优先级改为：
+  `standalone-ai.json` → 环境变量 → `balance-key.txt` → `config.toml`，
+  并统一跳过 `PROXY_*` / `*_MANAGED` 占位符。
+
 ## [1.6.4] - 2026-10-26
 
 ### Fixed

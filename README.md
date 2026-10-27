@@ -233,10 +233,13 @@ Chromium profile 和 DPI 缓存。
 
 key 的查找顺序：
 
-1. 环境变量 `DEEPSEEK_API_KEY`（或 `DSH_PET_BALANCE_KEY`）；
-2. `%LOCALAPPDATA%\dsh-pet-codex\balance-key.txt`（第一行）；
-3. `~/.codex/config.toml` 里的 `experimental_bearer_token`（找不到时用 `ANTHROPIC_AUTH_TOKEN`）
-   —— 也就是 Codex 正在用的那把 DeepSeek key。
+1. `DSH_HOME\dsh-pet\standalone-ai.json` 的 `apiKey`（和聊天/碎碎念同一把，最可靠）；
+2. 环境变量 `DEEPSEEK_API_KEY`（或 `DSH_PET_BALANCE_KEY`）；
+3. `%LOCALAPPDATA%\dsh-pet-codex\balance-key.txt`（第一行）；
+4. `~/.codex/config.toml` 里的 `experimental_bearer_token`（找不到时用 `ANTHROPIC_AUTH_TOKEN`）。
+
+`PROXY_…_MANAGED` 这类占位符会被跳过——CC Switch 切换配置档时会把 Codex 的 token
+改写成它，读到就会 401。
 
 查询走官方 `GET https://api.deepseek.com/user/balance`，展示的是账户余额
 （充值 + 赠送，按币种分条），与 DSH 的「平台登录 / 免费额度」路由是两条不同的数据源。

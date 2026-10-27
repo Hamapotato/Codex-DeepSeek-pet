@@ -76,21 +76,32 @@ const BALANCE_BUBBLE_SCALE = (() => {
 })();
 
 const PREAMBLE = `${MARK}
+function __petIsPlaceholderKey(value) {
+\t// CC Switch 之类的代理会把 Codex 的 token 改写成 PROXY_..._MANAGED 占位符
+\treturn !value || /^PROXY_/i.test(value) || /_MANAGED$/i.test(value);
+}
 function __petBalanceKey() {
+\t// 1) 桌宠自己的配置：和聊天/碎碎念用同一把 key，最可靠
+\ttry {
+\t\tconst home = process.env.DSH_HOME || "D:\\\\DeepSeekHarness";
+\t\tconst ai = JSON.parse(readFileSync(join(home, "dsh-pet", "standalone-ai.json"), "utf8"));
+\t\tconst key = ai && typeof ai.apiKey === "string" ? ai.apiKey.trim() : "";
+\t\tif (!__petIsPlaceholderKey(key)) return key;
+\t} catch {}
 \ttry {
 \t\tconst env = process.env.DEEPSEEK_API_KEY || process.env.DSH_PET_BALANCE_KEY;
-\t\tif (env && env.trim()) return env.trim();
+\t\tif (env && env.trim() && !__petIsPlaceholderKey(env.trim())) return env.trim();
 \t} catch {}
 \ttry {
 \t\tconst file = join(process.env.LOCALAPPDATA || homedir(), "dsh-pet-codex", "balance-key.txt");
 \t\tconst value = readFileSync(file, "utf8").trim();
-\t\tif (value) return value;
+\t\tif (value && !__petIsPlaceholderKey(value)) return value;
 \t} catch {}
 \ttry {
 \t\tconst text = readFileSync(join(homedir(), ".codex", "config.toml"), "utf8");
 \t\tconst match = text.match(/experimental_bearer_token\\s*=\\s*"([^"]+)"/) ||
 \t\t\ttext.match(/ANTHROPIC_AUTH_TOKEN\\s*=\\s*"([^"]+)"/);
-\t\tif (match) return match[1];
+\t\tif (match && !__petIsPlaceholderKey(match[1])) return match[1];
 \t} catch {}
 \treturn undefined;
 }
