@@ -51,7 +51,7 @@ const MAX_ITEMS = 40;
 const MAX_ITEM_CHARS = 140;
 // 一篇日记覆盖多少条提问：关闭 Codex 时门槛低一些，运行中攒够一大段才写。
 const MIN_TURNS_CLOSE = Number(process.env.DSH_DIARY_MIN_TURNS_CLOSE || 3);
-const MIN_TURNS_MIDRUN = Number(process.env.DSH_DIARY_MIN_TURNS_MIDRUN || 20);
+const MIN_TURNS_MIDRUN = Number(process.env.DSH_DIARY_MIN_TURNS_MIDRUN || 50);
 // deepseek-flash 会先写 reasoning_content 再写正文，预算太小会让正文被截断甚至为空。
 // 放宽到 3000：思考 + 更长的正文都有余地，实际用量仍然由提示词控制。
 const DEFAULT_MAX_TOKENS = Number(process.env.DSH_DIARY_MAX_TOKENS || 3000);
