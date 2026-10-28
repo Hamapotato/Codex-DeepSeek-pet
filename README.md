@@ -4,8 +4,17 @@ Codex 的 lifecycle hooks 在每一轮对话中调用 `hook.js`，通过 dsh-pet
 让桌面宠物播放动画 / 弹气泡。桌宠本体是安装在 DSH 里的 `dsh-pet`
 （显示名 **大肥鱼**），这里只放联动脚本和对官方包的本机补丁。
 
-本机当前部署位置：`D:\WORK\Codex-DeepSeek-pet`（同时也是 GitHub 上游仓库
-`Hamapotato/Codex-DeepSeek-pet` 的工作副本）。`%USERPROFILE%\.codex\dsh-pet` 已不再使用。
+**部署约定**：仓库可以放在任意目录（下文用 `%USERPROFILE%\Codex-DeepSeek-pet` 举例）；
+DSH 的安装目录用环境变量 `DSH_HOME` 指定，默认 `%USERPROFILE%\DeepSeekHarness`。
+所有路径都集中在 `src/config.js`，换机器只需改这一处或设环境变量。
+
+不想设全局环境变量的话，也可以在用户主目录放一行 `.dsh-home`（不进仓库）：
+
+```
+C:\Users\<你>\.dsh-home     内容例如： D:\DeepSeekHarness
+```
+
+查找顺序：`DSH_HOME` 环境变量 → `~/.dsh-home` → `~/DeepSeekHarness`。
 
 ## 功能
 
@@ -25,7 +34,7 @@ Codex 的 lifecycle hooks 在每一轮对话中调用 `hook.js`，通过 dsh-pet
 ## 目录结构
 
 ```
-D:/WORK/Codex-DeepSeek-pet/
+%USERPROFILE%/Codex-DeepSeek-pet/
 ├─ hook.js                     Codex hook 入口（只 require src/hook.js，必须留在根目录）
 ├─ package.json                脚本入口（build / check / launch / watch / diary:*）
 ├─ src/
@@ -73,8 +82,8 @@ D:/WORK/Codex-DeepSeek-pet/
 前提：Windows、Node.js ≥ 18、已安装 DeepSeek Harness（含 dsh-pet 0.3.8+）、
 Codex 桌面版。
 
-1. **放代码**：把整个项目放到任意目录（例如 `D:\WORK\Codex-DeepSeek-pet`）。
-2. **确认 DSH 路径**：默认 `D:\DeepSeekHarness`。不同的话设用户环境变量
+1. **放代码**：把整个项目放到任意目录（例如 `%USERPROFILE%\Codex-DeepSeek-pet`）。
+2. **确认 DSH 路径**：默认 `%DSH_HOME%`。不同的话设用户环境变量
    `DSH_HOME`（或在 `src/config.js` 里改默认值）。
 3. **配置桌宠**：
    - `config\main-config.sample.jsonc` → `<DSH_HOME>\dsh-pet\main-config.jsonc`；
@@ -118,7 +127,7 @@ Codex 桌面版。
 
 ## 桌宠：大肥鱼
 
-配置在 `D:\DeepSeekHarness\dsh-pet\main-config.jsonc`：
+配置在 `%DSH_HOME%\dsh-pet\main-config.jsonc`：
 
 ```jsonc
 {
@@ -136,7 +145,7 @@ Codex 桌面版。
 ```
 
 改完配置后重启桌宠（或右键「工具 → 重载配置」）。`name` 会同时用于悬浮提示、
-对话人设里的「你的名字是…」；聊天记忆 `D:\DeepSeekHarness\dsh-pet\memory.json`
+对话人设里的「你的名字是…」；聊天记忆 `%DSH_HOME%\dsh-pet\memory.json`
 里的旧自我介绍也已同步改成大肥鱼。
 
 程序层面的显示名也一并改了：托盘图标的提示从「dsh-pet 桌面宠物」改成「大肥鱼」
@@ -170,7 +179,7 @@ Chromium profile 和 DPI 缓存。
   触发器  事件 Microsoft-Windows-AppModel-Runtime/Admin, EventID 201
           EventData/ApplicationName = OpenAI.Codex_2p2nqsd0c76g0!App
           EventData/Message = [LaunchProcess]
-  动作    explorer.exe "D:\WORK\Codex-DeepSeek-pet\scripts\start-watch.vbs"
+  动作    explorer.exe "%USERPROFILE%\Codex-DeepSeek-pet\scripts\start-watch.vbs"
 ```
 
 任务通过 `explorer.exe` 转一手，是为了让桌宠脱离 Codex 的进程 job（直接子进程会随 Codex 一起被杀）。
@@ -181,7 +190,7 @@ Chromium profile 和 DPI 缓存。
 手动跑一次看门狗逻辑（会立即拉起还没运行的桌宠）：
 
 ```sh
-"C:/PROGRA~1/nodejs/node.exe" "D:/WORK/Codex-DeepSeek-pet/src/watch-codex.js" --once
+"%USERPROFILE%/Codex-DeepSeek-pet/src/watch-codex.js" --once
 ```
 
 配合 `hook.js` 的双保险：即使看门狗没起来，Codex 触发 hook 时发现桌宠不在也会拉起。
@@ -193,9 +202,9 @@ Chromium profile 和 DPI 缓存。
 
 1. **独立模式**（`dsh-pet-standalone`）—— 只开一个透明置顶的桌宠小窗，不需要 DSH，
    启动快、没有 DSH 主窗口。入口是
-   `D:\DeepSeekHarness\profiles\desktop\node_modules\dsh-pet\lib\standalone.js`。
+   `%DSH_HOME%\profiles\desktop\node_modules\dsh-pet\lib\standalone.js`。
    独立模式的写接口要能力 token，脚本会从
-   `D:\DeepSeekHarness\dsh-pet\standalone-runtime.json` 读取（同用户私有文件）。
+   `%DSH_HOME%\dsh-pet\standalone-runtime.json` 读取（同用户私有文件）。
 2. **完整 DSH 应用** —— 插件内嵌在 DSH 里。只有独立模式入口不存在时才回退到它
    （会弹出 DSH 主窗口）。
 
@@ -276,7 +285,7 @@ key 的查找顺序：
 刷新频率在用户配置里：
 
 ```jsonc
-// D:\DeepSeekHarness\dsh-pet\main-config.jsonc
+// %DSH_HOME%\dsh-pet\main-config.jsonc
 "eventsRefreshSec": { "balance": 30 }
 ```
 
@@ -294,7 +303,7 @@ key 的查找顺序：
 存放位置：
 
 ```
-D:\DeepSeekHarness\dsh-pet\diary\
+%DSH_HOME%\dsh-pet\diary\
 ├─ 2026-10-24.md     每天一个文件，里面按时间分小节（## 15:30 · 8 件事）
 ├─ index.md          全部日记的汇总（最新在前）
 ├─ viewer.html       阅读页（右键菜单「查看日记」打开的就是它）
@@ -403,7 +412,7 @@ D:\DeepSeekHarness\dsh-pet\diary\
 ### 存放与查看
 
 ```
-D:\DeepSeekHarness\dsh-pet\impressions\
+%DSH_HOME%\dsh-pet\impressions\
 ├─ profile.json     结构化印象
 ├─ profile.md       人读版
 ├─ viewer.html      阅读页（字体与余额气泡一致）
@@ -451,7 +460,7 @@ node src/impressions.js --force   # 无视门槛立即分析
 **触发**：每天一次，12 点之后、且是谷时；Codex 没开就等下次打开补上。
 写完后：
 
-- 单独存一份 `D:\DeepSeekHarness\dsh-pet\tour\YYYY-MM-DD.md`（含素材来源、图片路径）
+- 单独存一份 `%DSH_HOME%\dsh-pet\tour\YYYY-MM-DD.md`（含素材来源、图片路径）
 - 在当天日记末尾追加一节，标题带「🐟 游记」标签，阅读页里显示成金色徽章
 - 桌宠弹一句「我出去玩啦～今天…」
 
@@ -519,7 +528,7 @@ node src/chat-link.js --link <sessionId>   # 显式指定
 node src/chat-link.js --context            # 预览会注入的上下文
 ```
 
-绑定关系存在 `D:\DeepSeekHarness\dsh-pet\chat-link.json`。
+绑定关系存在 `%DSH_HOME%\dsh-pet\chat-link.json`。
 
 ### 每一轮发生了什么
 
@@ -534,7 +543,7 @@ node src/chat-link.js --context            # 预览会注入的上下文
         └─ 从 transcript 取"最后一问 + 最后一答"写进 memory.json
 ```
 
-桌宠自己的聊天窗读写的是**同一个** `D:\DeepSeekHarness\dsh-pet\memory.json`，
+桌宠自己的聊天窗读写的是**同一个** `%DSH_HOME%\dsh-pet\memory.json`，
 所以两边共享记忆（只保留最近 200 条）。
 
 ### 边界（可验证）
@@ -614,7 +623,7 @@ node src/diary.js --force             # 忽略冷却，重写
 npm run diary:rebuild                 # 重建当天：旧文件备份到 diary/archive/，按 60 分钟间隔重新分条
 ```
 
-模型和 key 复用 `D:\DeepSeekHarness\dsh-pet\standalone-ai.json`（`baseUrl` / `model` / `apiKey`）。
+模型和 key 复用 `%DSH_HOME%\dsh-pet\standalone-ai.json`（`baseUrl` / `model` / `apiKey`）。
 想换更便宜的模型或调预算，设环境变量 `DSH_DIARY_MAX_TOKENS`，或直接改 `src/diary.js` 里的 `DEFAULT_MAX_TOKENS`。
 
 隐私：只有**截断后的提问摘要**会发给 DeepSeek，助手回复和工具输出不发送；
@@ -696,7 +705,7 @@ node -e "require('./src/hosts').findAnyHost().then(h=>console.log(h&&h.mode, h&&
 > 关掉其中一只即可。启动顺序反过来的情况已经覆盖。
 
 ```sh
-"C:/PROGRA~1/nodejs/node.exe" "D:/WORK/Codex-DeepSeek-pet/hook.js" --check
+"%USERPROFILE%/Codex-DeepSeek-pet/hook.js" --check
 ```
 
 输出 `dsh-pet OK (standalone) · 127.0.0.1:3080 · pet=main` 即正常，括号里是宿主类型
@@ -725,7 +734,7 @@ wscript "%LOCALAPPDATA%\dsh-pet-codex\launch-standalone.vbs"
 或直接跑启动器：
 
 ```sh
-"C:/PROGRA~1/nodejs/node.exe" "D:/WORK/Codex-DeepSeek-pet/src/standalone-launcher.js"
+"%USERPROFILE%/Codex-DeepSeek-pet/src/standalone-launcher.js"
 ```
 
 关闭：桌宠右键菜单退出，或带 token 请求 `POST http://127.0.0.1:3080/shutdown`。

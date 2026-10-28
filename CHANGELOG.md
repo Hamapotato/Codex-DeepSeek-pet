@@ -7,6 +7,17 @@
 
 _暂无_
 
+## [1.7.0] - 2026-10-28
+
+### Changed
+
+- 去掉仓库里写死的个人绝对路径，改成通用约定：
+  - `DSH_HOME` 环境变量 → `~/.dsh-home`（本机覆盖，不进仓库）→ `~/DeepSeekHarness`；
+  - README / 架构文档 / 样例配置里的 `D:\DeepSeekHarness`、`C:\Users\<name>` 等
+    全部换成 `%DSH_HOME%`、`%USERPROFILE%` 之类的占位符；
+  - 文档里的 `C:/PROGRA~1/nodejs/node.exe` 简化为 `node`。
+- 仓库内容确认可在公开环境下安全发布（无记忆/日记/印象/游记/密钥）。
+
 ## [1.6.5] - 2026-10-28
 
 ### Fixed

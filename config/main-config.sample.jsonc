@@ -1,6 +1,6 @@
 // dsh-pet 用户配置模板（JSONC，允许注释）。
 // 部署时复制到：<DSH_HOME>\dsh-pet\main-config.jsonc
-// 例如：D:\DeepSeekHarness\dsh-pet\main-config.jsonc
+// 例如：%DSH_HOME%\dsh-pet\main-config.jsonc
 {
   "pets": [
     {

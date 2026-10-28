@@ -10,12 +10,27 @@
 
 const path = require('path');
 const os = require('os');
+const fs = require('fs');
 
 /** Repository root (the directory that holds README.md and the entry shims). */
 const PROJECT_DIR = path.resolve(__dirname, '..');
 
-/** DeepSeek Harness install. DSH's own runtime files live under it. */
-const DSH_HOME = process.env.DSH_HOME || 'D:\\DeepSeekHarness';
+/**
+ * DeepSeek Harness 的安装目录。仓库里不写死任何人的绝对路径，按这个顺序找：
+ *   1. 环境变量 DSH_HOME
+ *   2. 用户主目录下的 `.dsh-home` 文件（一行路径，本机覆盖用，不进仓库）
+ *   3. ~/DeepSeekHarness（通用默认）
+ */
+function resolveDshHome() {
+  if (process.env.DSH_HOME) return process.env.DSH_HOME;
+  try {
+    const override = fs.readFileSync(path.join(os.homedir(), '.dsh-home'), 'utf8').trim();
+    if (override) return override;
+  } catch {}
+  return path.join(os.homedir(), 'DeepSeekHarness');
+}
+
+const DSH_HOME = resolveDshHome();
 
 /** The installed dsh-pet package (its files are never edited by hand). */
 const PKG = path.join(DSH_HOME, 'profiles', 'desktop', 'node_modules', 'dsh-pet');

@@ -1,7 +1,7 @@
 # 架构与数据流
 
 一句话：**Codex 的 lifecycle hook → 本机 HTTP → dsh-pet 桌宠**；桌宠本身是
-`D:\DeepSeekHarness` 里安装的 `dsh-pet` 包，这个仓库只放"胶水"和对它打的补丁。
+`%DSH_HOME%` 里安装的 `dsh-pet` 包，这个仓库只放"胶水"和对它打的补丁。
 
 ```
 Codex (MSIX / CLI)
@@ -40,7 +40,7 @@ Electron helper ──► 透明置顶小窗（桌宠 + 气泡 + 右键菜单）
 | `src/chat-link.js` | 心声线：绑定一条对话，双向同步人设/日记/印象/记忆 |
 | `scripts/start-watch.vbs` | 计划任务的隐藏入口 |
 | `install/` | 一次性安装脚本：写 hooks、注册/注销计划任务 |
-| `config/` | 脱敏样例配置（真实配置在 `D:\DeepSeekHarness\dsh-pet\`） |
+| `config/` | 脱敏样例配置（真实配置在 `%DSH_HOME%\dsh-pet\`） |
 
 ## 数据流：日记
 
@@ -52,7 +52,7 @@ Electron helper ──► 透明置顶小窗（桌宠 + 气泡 + 右键菜单）
         ▼
    DeepSeek /chat/completions  (deepseek-flash)
         ▼
-D:\DeepSeekHarness\dsh-pet\diary\YYYY-MM-DD.md   + index.md + viewer.html
+%DSH_HOME%\dsh-pet\diary\YYYY-MM-DD.md   + index.md + viewer.html
 ```
 
 ## 数据流：印象簿
@@ -64,7 +64,7 @@ diary/*.md（已压缩的日记摘要）
         ▼
    DeepSeek /chat/completions   （只输出一小段 JSON）
         ▼
-D:\DeepSeekHarness\dsh-pet\impressions\profile.{json,md} + viewer.html
+%DSH_HOME%\dsh-pet\impressions\profile.{json,md} + viewer.html
 ```
 
 证据不足时不会生成结论，阅读页只显示「还在观察」和进度数字。
@@ -89,7 +89,7 @@ memory.json  （桌宠聊天窗读写同一份）
 
 ## 补丁机制
 
-`src/patches/*` 改的是 `D:\DeepSeekHarness\profiles\desktop\node_modules\dsh-pet`
+`src/patches/*` 改的是 `%DSH_HOME%\profiles\desktop\node_modules\dsh-pet`
 里的文件，每个补丁：
 
 1. 幂等 —— 用 `/* dsh-pet xxx patch */` 标记，重复执行会跳过；
